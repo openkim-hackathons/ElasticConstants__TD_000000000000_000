@@ -489,8 +489,11 @@ class ElasticConstants(object):
                     # Separate full Hessian into blocks
                     # (eps-eps, eps-disp, disp-disp)
                     hess_ee = fullhessian[0:6,0:6]
+                    print(hess_ee)
                     hess_ed = fullhessian[0:6,6:]
+                    print(hess_ed)
                     hess_dd = fullhessian[6:,6:]
+                    print(hess_dd)
                     # Invert disp-disp block
                     hess_dd_inv = inv(hess_dd)
                     # Compute hessian accounting for basis atom relaxation. based
@@ -595,7 +598,7 @@ def calc_bulk(elastic_constants):
 
     Returns:
         bulk : float
-            The bulk modulus, defines as the ratio between the hydrostatic
+            The bulk modulus, defined as the ratio between the hydrostatic
             stress (negative of the pressure p) in hydrostatic loading and
             the diltation e (trace of the strain tensor), i.e. B = -p/e
     """
@@ -693,6 +696,8 @@ if __name__ == "__main__":
         param_values_superlist.append(param_values)
     model = input("model name:\n")
     print(model)
+    method = input("Elastic constants computation method? (energy-condensed, energy-full, stress-condensed, or stress-condensed-fast)\n")
+    print(method)
 
     aflow  = AFLOW()
 
@@ -708,7 +713,7 @@ if __name__ == "__main__":
     supercell.set_calculator(calc)
     moduli = ElasticConstants(supercell, condensed_minimization_method='bfgs')
     elastic_constants, error_estimate = \
-         moduli.results(optimize=True, method="energy-condensed")
+         moduli.results(optimize=False, method=method)
     bulk = calc_bulk(elastic_constants)
 
     # Apply unit conversion
