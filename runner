@@ -489,11 +489,8 @@ class ElasticConstants(object):
                     # Separate full Hessian into blocks
                     # (eps-eps, eps-disp, disp-disp)
                     hess_ee = fullhessian[0:6,0:6]
-                    print(hess_ee)
                     hess_ed = fullhessian[0:6,6:]
-                    print(hess_ed)
                     hess_dd = fullhessian[6:,6:]
-                    print(hess_dd)
                     # Invert disp-disp block
                     hess_dd_inv = inv(hess_dd)
                     # Compute hessian accounting for basis atom relaxation. based
@@ -714,12 +711,12 @@ if __name__ == "__main__":
     moduli = ElasticConstants(supercell, condensed_minimization_method='bfgs')
     elastic_constants, error_estimate = \
          moduli.results(optimize=False, method=method)
-    bulk = calc_bulk(elastic_constants)
+#    bulk = calc_bulk(elastic_constants)
 
     # Apply unit conversion
     elastic_constants /= GPa
     error_estimate /= GPa
-    bulk /= GPa
+#    bulk /= GPa
     units = 'GPa'
 
     # Compute nearest isotropic constants and distance
@@ -738,7 +735,7 @@ if __name__ == "__main__":
     print('Error estimate [{}]:'.format(units))
     print(np.array_str(error_estimate, precision=5, suppress_small=True))
     print()
-    print('Bulk modulus [{}] = {:.5f}'.format(units,bulk))
+    #print('Bulk modulus [{}] = {:.5f}'.format(units,bulk))
     print()
     if got_iso:
         print('Nearest matrix of isotropic elastic constants:')
