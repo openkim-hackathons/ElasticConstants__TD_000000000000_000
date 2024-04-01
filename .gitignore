@@ -1,5 +1,6 @@
 # Custom stuff
 *log*
+output/results.edn
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
