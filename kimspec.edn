@@ -1,0 +1,6 @@
+{
+ "properties" ["tag:staff@noreply.openkim.org,2024-01-26:property/elastic-constants-isothermal-npt",
+                "tag:staff@noreply.openkim.org,2024-01-26:property/bulk-modulus-isothermal-npt"]
+ "extended-id" "ElasticConstants__TD_000000000000_000"
+ "kim-api-version" "2.3"
+}

@@ -321,10 +321,8 @@ def get_unique_components_and_reconstruct_matrix(elastic_constants,space_group_n
     reconstructed_matrix = reconstructed_matrix + reconstructed_matrix.T - np.diag(reconstructed_matrix.diagonal())
 
     print ("\n########################################################################\n"
-           "MAXIMUM DEVIATION FROM CRYSTAL SYMMETRY AND MATERIAL FRAME INDIFFERENCE:\n"
-           "########################################################################")
-    print (np.max(reconstructed_matrix-elastic_constants))
-    print ("########################################################################\n")
+           "MAXIMUM DEVIATION FROM CRYSTAL SYMMETRY AND MATERIAL FRAME INDIFFERENCE: %f\n"%np.max(reconstructed_matrix-elastic_constants)+
+           "########################################################################\n")
 
     return elastic_constants_names,elastic_constants_values,reconstructed_matrix
                 
