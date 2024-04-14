@@ -27,7 +27,7 @@ class TestDriver(CrystalGenomeTestDriver):
         print('\nE L A S T I C  C O N S T A N T  C A L C U L A T I O N S\n')
         print()
 
-        moduli = ElasticConstants(self.atoms, condensed_minimization_method='bfgs')
+        moduli = ElasticConstants(self.atoms, condensed_minimization_method='scipy')
         elastic_constants, error_estimate = \
             moduli.results(optimize=False, method=method)
         bulk = calc_bulk(elastic_constants)
@@ -86,7 +86,8 @@ if __name__ == "__main__":
     ####################################################
     # if called directly, do some debugging examples
     ####################################################
-    kim_model_name = "MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002"
+    # kim_model_name = "MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002"
+    kim_model_name = "EAM_Dynamo_HepburnAckland_2008_FeC__MO_143977152728_005"
 
     # For initialization, only pass a KIM model name or an ASE calculator
     test_driver = TestDriver(kim_model_name)
@@ -104,16 +105,16 @@ if __name__ == "__main__":
 
     # Alternatively, you can pass a Crystal Genome designation. You can automatically query for all equilibrium structures for a given 
     # species and prototype label like this:
-    cg_des_list = query_crystal_genome_structures(kim_model_name, ["Fe", "P"], "A2B_hP9_189_fg_ad")
+    cg_des_list = query_crystal_genome_structures(kim_model_name, ["C", "Fe"], "AB3_tI32_82_g_3g")
 
     # IMPORTANT: cg_des is a LIST. Pass only one element of it to the test, as keywords (i.e. using **):
     for cg_des in cg_des_list:
-        test_driver(**cg_des,method="energy-full")
+        test_driver(**cg_des)
 
     # Now both results are in the property instances:
-    print(test_driver.get_property_instances())
+    # print(test_driver.get_property_instances())
 
-    test_driver.write_property_instances_to_file()
+    # test_driver.write_property_instances_to_file()
 
     # Here are some other crystal prototypes supported by the current model you can try:
     # ["Fe", "P"], "A2B_hP9_189_fg_ad"

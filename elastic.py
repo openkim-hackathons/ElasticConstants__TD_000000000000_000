@@ -260,13 +260,11 @@ TRICLINIC_EQN = {}
 # error check typing in the above dicts
 for eqn in CUBIC_EQN,HEXAGONAL_EQN,TRIGONAL_EQN,TETRAGONAL_EQN,ORTHORHOMBIC_EQN,MONOCLINIC_EQN,TRICLINIC_EQN:
     assert(sorted(list(set(eqn.keys())))==sorted(list(eqn.keys()))) # only unique keys
-    independent_components = []
+    # check that all components appearing in RHS of relations are independent, i.e. they don't appear as a key
     for dependent_component in eqn:
         if eqn[dependent_component] is not None:
-            independent_components += eqn[dependent_component][1]
-    # check that all components appearing in RHS of relations 
-    for independent_component in independent_components:
-        assert not(independent_component in eqn)
+            for independent_component in eqn[dependent_component][1]:
+                assert not(independent_component in eqn)
 
 def get_unique_components_and_reconstruct_matrix(elastic_constants,space_group_number):
     """
@@ -377,7 +375,13 @@ def minimize_PreconLBFGS(supercell, fmax=0.05, smax=0.05, steps=100000000, \
         minimization_stalled = False
     except:
         minimization_stalled = True
-        iteration_limits_reached = False
+        iteration_limits_reached = False        
+
+    print("Minimization "+
+        ("converged" if not minimization_stalled else "stalled")+
+        " after "+
+        (("hitting the maximum of "+str(steps)) if iteration_limits_reached else str(opt.nsteps))+
+        " steps.")
     return iteration_limits_reached, minimization_stalled
 
 class ElasticConstants(object):
