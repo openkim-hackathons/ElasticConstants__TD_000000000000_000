@@ -7,7 +7,7 @@ from elastic import ElasticConstants, calc_bulk, find_nearest_isotropy, get_uniq
 import numpy as np
 
 class TestDriver(CrystalGenomeTestDriver):
-    def _calculate(self, method: str="energy-condensed", **kwargs):
+    def _calculate(self, optimize:bool=False, method: str="energy-condensed", escalate: bool=False, **kwargs):
         """
         Example calculate method. Just recalculates the binding-energy-crystal property.
 
@@ -16,8 +16,12 @@ class TestDriver(CrystalGenomeTestDriver):
         You must include **kwargs in the argument list, but you don't have to do anything with it
 
         Args:
+            optimize:
+                whether to optimize provided simulation cell
             method:
                 method for calculating elasticity matrix. 
+            escalate:
+                whether to automatically escalate calculation to a higher method if requested fails
         """
 
         ####################################################
@@ -27,14 +31,19 @@ class TestDriver(CrystalGenomeTestDriver):
         print('\nE L A S T I C  C O N S T A N T  C A L C U L A T I O N S\n')
         print()
 
-        moduli = ElasticConstants(self.atoms, condensed_minimization_method='scipy')
-        elastic_constants, error_estimate = \
-            moduli.results(optimize=False, method=method)
+        self.atoms.write("log.poscar",format='vasp')
+
+        space_group = int(self.prototype_label.split('_')[2])
+
+        moduli = ElasticConstants(self.atoms)
+        elastic_constants, error_estimate, elastic_constants_names, elastic_constants_values = \
+            moduli.results(optimize=optimize, method=method, escalate=escalate, space_group=space_group)
         bulk = calc_bulk(elastic_constants)
 
         # Apply unit conversion
         elastic_constants /= GPa
         error_estimate /= GPa
+        elastic_constants_values = [elconst/GPa for elconst in elastic_constants_values]
         bulk /= GPa
         units = 'GPa'        
 
@@ -56,6 +65,10 @@ class TestDriver(CrystalGenomeTestDriver):
         print()
         print('Bulk modulus [{}] = {:.5f}'.format(units,bulk))
         print()
+        print('Unique elastic constants for space group {} [{}]'.format(space_group,units))
+        print(elastic_constants_names)
+        print(elastic_constants_values)
+        print()
         if got_iso:
             print('Nearest matrix of isotropic elastic constants:')
             print('Distance to isotropic state [-]  = {:.5f}'.format(d_iso))
@@ -64,8 +77,6 @@ class TestDriver(CrystalGenomeTestDriver):
         else:
             print('WARNING: Nearest isotropic state not computed.')
 
-        elastic_constants_names,elastic_constants_values,reconstructed_matrix = get_unique_components_and_reconstruct_matrix(
-            elastic_constants,int(self.prototype_label.split('_')[2]))
         ####################################################
         # ACTUAL CALCULATION ENDS 
         ####################################################
@@ -76,8 +87,9 @@ class TestDriver(CrystalGenomeTestDriver):
         self._add_property_instance_and_common_crystal_genome_keys("elastic-constants-isothermal-npt",write_stress=True,write_temp=True)
         self._add_key_to_current_property_instance("elastic-constants-names",elastic_constants_names)
         self._add_key_to_current_property_instance("elastic-constants-values",elastic_constants_values,"GPa")
-        self._add_key_to_current_property_instance("elasticity-matrix",reconstructed_matrix,"GPa")
-        self._add_key_to_current_property_instance("distance-to-isotropy",d_iso)
+        self._add_key_to_current_property_instance("elasticity-matrix",elastic_constants,"GPa")
+        if got_iso:
+            self._add_key_to_current_property_instance("distance-to-isotropy",d_iso)
         self._add_property_instance_and_common_crystal_genome_keys("bulk-modulus-isothermal-npt",write_stress=True,write_temp=True)
         self._add_key_to_current_property_instance("isothermal-bulk-modulus",bulk,"GPa")
 
@@ -86,8 +98,7 @@ if __name__ == "__main__":
     ####################################################
     # if called directly, do some debugging examples
     ####################################################
-    # kim_model_name = "MEAM_LAMMPS_KoJimLee_2012_FeP__MO_179420363944_002"
-    kim_model_name = "EAM_Dynamo_HepburnAckland_2008_FeC__MO_143977152728_005"
+    kim_model_name = "EAM_Dynamo_AcklandMendelevSrolovitz_2004_FeP__MO_884343146310_005"
 
     # For initialization, only pass a KIM model name or an ASE calculator
     test_driver = TestDriver(kim_model_name)
@@ -105,31 +116,14 @@ if __name__ == "__main__":
 
     # Alternatively, you can pass a Crystal Genome designation. You can automatically query for all equilibrium structures for a given 
     # species and prototype label like this:
-    cg_des_list = query_crystal_genome_structures(kim_model_name, ["C", "Fe"], "AB3_tI32_82_g_3g")
+    cg_des_list = query_crystal_genome_structures(kim_model_name, ["Fe","P"], "A2B_hP9_189_fg_ad")
 
     # IMPORTANT: cg_des is a LIST. Pass only one element of it to the test, as keywords (i.e. using **):
     for cg_des in cg_des_list:
-        test_driver(**cg_des)
+        test_driver(**cg_des,optimize=False,method="energy-condensed",escalate=True)
 
     # Now both results are in the property instances:
     # print(test_driver.get_property_instances())
 
     # test_driver.write_property_instances_to_file()
 
-    # Here are some other crystal prototypes supported by the current model you can try:
-    # ["Fe", "P"], "A2B_hP9_189_fg_ad"
-    # ["Fe", "P"], "A3B_tI32_82_3g_g"
-    # ["Fe", "P"], "AB_oP8_62_c_c"
-    # ["Fe", "P"], "AB2_oP6_58_a_g"
-    # ["Fe", "P"], "AB4_mC40_15_ae_4f"
-    # ["Fe", "P"], "AB4_mP30_14_ae_6e"
-    # ["Fe", "P"], "AB4_oC20_20_a_2c"
-    # ["Fe"], "A_cF4_225_a"
-    # ["Fe"], "A_cI2_229_a"
-    # ["Fe"], "A_hP2_194_c"
-    # ["Fe"], "A_tP28_136_f2ij"
-    # ["P"], "A_aP24_2_12i"
-    # ["P"], "A_cP1_221_a"
-    # ["P"], "A_mC16_12_2ij"
-    # ["P"], "A_oC8_64_f"
-    # ["P"], "A_tI4_139_e"

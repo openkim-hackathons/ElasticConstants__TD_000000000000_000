@@ -1,11 +1,31 @@
-{"stoichiometric_species": ["Fe", "P"], "prototype_label": "A2B_hP9_189_fg_ad", "crystal_genome_test_args": {}}
-{"stoichiometric_species": ["Fe", "P"], "prototype_label": "A3B_tI32_82_3g_g", "crystal_genome_test_args": {}}
-{"stoichiometric_species": ["Fe", "P"], "prototype_label": "AB_oP8_62_c_c", "crystal_genome_test_args": {}}
-{"stoichiometric_species": ["Fe", "P"], "prototype_label": "AB2_oP6_58_a_g", "crystal_genome_test_args": {}}
-{"stoichiometric_species": ["Fe", "P"], "prototype_label": "AB4_mC40_15_ae_4f", "crystal_genome_test_args": {}}
-{"stoichiometric_species": ["Fe", "P"], "prototype_label": "AB4_mP30_14_ae_6e", "crystal_genome_test_args": {}}
-{"stoichiometric_species": ["Fe", "P"], "prototype_label": "AB4_oC20_20_a_2c", "crystal_genome_test_args": {}}
-{"stoichiometric_species": ["Fe"], "prototype_label": "A_cF4_225_a", "crystal_genome_test_args": {}}
-{"stoichiometric_species": ["Fe"], "prototype_label": "A_cI2_229_a", "crystal_genome_test_args": {}}
-{"stoichiometric_species": ["Fe"], "prototype_label": "A_hP2_194_c", "crystal_genome_test_args": {}}
-{"stoichiometric_species": ["Fe"], "prototype_label": "A_tP28_136_f2ij", "crystal_genome_test_args": {}}
+{"stoichiometric_species": ["O", "Si"], "prototype_label": "A2B_aP18_1_12a_6a", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "250401643418"}
+{"stoichiometric_species": ["Al", "Mn"], "prototype_label": "A11B4_aP15_2_a5i_2i", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "642053874232"}
+{"stoichiometric_species": ["O", "Ta"], "prototype_label": "A5B2_mC14_5_a2c_c", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "701225532375"}
+{"stoichiometric_species": ["O", "Si"], "prototype_label": "A2B_mP12_7_4a_2a", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "078602809153"}
+{"stoichiometric_species": ["Cu", "Zr"], "prototype_label": "AB_mP4_11_e_e", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "803565704203"}
+{"stoichiometric_species": ["Fe", "P"], "prototype_label": "AB4_oC20_20_a_2c", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "526077395899"}
+{"stoichiometric_species": ["C", "N"], "prototype_label": "AB2_oC12_36_a_2a", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "411819883127"}
+{"stoichiometric_species": ["N"], "prototype_label": "A_oP2_51_e", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "498321008200"}
+{"stoichiometric_species": ["H", "N", "O"], "prototype_label": "A4B2C3_tP72_77_8d_ab2c2d_6d", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "985429501420"}
+{"stoichiometric_species": ["O", "Si"], "prototype_label": "A2B_tI24_82_2g_g", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "116249566373"}
+{"stoichiometric_species": ["C", "Fe"], "prototype_label": "AB4_tI10_87_a_h", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "340135017277"}
+{"stoichiometric_species": ["Ge"], "prototype_label": "A_tP12_96_ab", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "011671077809"}
+{"stoichiometric_species": ["Ce", "H"], "prototype_label": "A2B5_tI28_109_2a_ac", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "963529472340"}
+{"stoichiometric_species": ["C", "N"], "prototype_label": "AB2_tI6_119_a_f", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "603023191078"}
+{"stoichiometric_species": ["Cs"], "prototype_label": "A_tI4_141_a", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "897930162824"}
+{"stoichiometric_species": ["S"], "prototype_label": "A_hP18_143_6d", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "986719725103"}
+{"stoichiometric_species": ["Si"], "prototype_label": "A_hR8_148_cf", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "400046816274"}
+{"stoichiometric_species": ["S"], "prototype_label": "A_hP9_154_ac", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "115583943004"}
+{"stoichiometric_species": ["Mo", "Se"], "prototype_label": "AB2_hR3_160_a_2a", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "519136600598"}
+{"stoichiometric_species": ["C"], "prototype_label": "A_hR2_166_c", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "879668947083"}
+{"stoichiometric_species": ["Al", "Ca", "O"], "prototype_label": "A2BC4_hP42_173_2c_a2b_4c", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "317091311333"}
+{"stoichiometric_species": ["C", "N"], "prototype_label": "A3B4_hP14_176_h_ch", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "122111177705"}
+{"stoichiometric_species": ["Te", "Zn"], "prototype_label": "AB_hP6_181_c_d", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "192963943645"}
+{"stoichiometric_species": ["S", "Zn"], "prototype_label": "AB_hP8_186_ab_ab", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "997449708155"}
+{"stoichiometric_species": ["Al", "Ca", "Si"], "prototype_label": "ABC_hP3_187_a_d_e", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "736411084241"}
+{"stoichiometric_species": ["Si"], "prototype_label": "A_hP2_194_c", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "900525904653"}
+{"stoichiometric_species": ["N"], "prototype_label": "A_cP8_198_2a", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "730204522904"}
+{"stoichiometric_species": ["C"], "prototype_label": "A_cI16_206_c", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "610724121166"}
+{"stoichiometric_species": ["Li"], "prototype_label": "A_cP4_213_a", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "960166281800"}
+{"stoichiometric_species": ["C", "Fe"], "prototype_label": "AB4_cP5_215_a_e", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "210008985825"}
+{"stoichiometric_species": ["Al"], "prototype_label": "A_cI2_229_a", "crystal_genome_test_args": {"optimize": false, "method": "energy-condensed", "escalate": true}, "kimnum": "603023441977"}

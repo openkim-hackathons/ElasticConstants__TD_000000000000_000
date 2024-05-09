@@ -36,6 +36,13 @@ slower. The `stress-condensed` approach is significantly faster than
 purposes or, for very large systems, the `stress-condensed` method is an
 option.
 
+If the error reported by the numdifftools is too large, the code automatically
+escalates to the next more accurate (slower) method. This is controlled by the 
+ELASTIC_CONSTANTS_ERROR_TOLERANCE constant in this file. Additionally,
+you can provide a space group to check whether or not the elastic constants
+conform to the expected material symmetry. To use this, the unit cell
+must be in standard IUCr orientation.
+
 === Theory ===
 
 All three approaches involves numerical differentiation of energy or stress
@@ -127,24 +134,31 @@ Revisions:
 2019/04/13 Ellad Tadmor added ability to do diamond)
 2022/02/01 Chloe Zeller (lammps compatibility - specific usage case)
 2022/02/22 Ellad Tadmor generalized to arbitrary crystal structures
+2024/05/08 Ilia Nikiforov Symmetry checking and refactoring for robust Crystal Genome operation
 
 """
 
 import numpy as np
+import numpy.typing as npt
 from numpy.linalg import inv
 from numpy.linalg import eig
 from numpy.linalg import matrix_rank
-from ase.calculators.kim.kim import KIM
-from ase.optimize.precon import PreconLBFGS
-from ase.units import GPa
-#@ from ase.constraints import ExpCellFilter
+from ase.optimize import LBFGSLineSearch
+from ase.constraints import ExpCellFilter
+from ase.atoms import Atoms
 import numdifftools as ndt
 from numdifftools.step_generators import MaxStepGenerator
-from scipy.optimize import minimize
 import math
-from crystal_genome_util.aflow_util import AFLOW
+from typing import Optional, Union, IO, Tuple, List
 
-# Encoding of symmetry restrictions on elasticity tensors.
+FMAX_INITIAL = 1e-5 # Force tolerance for the optional initial relaxation of the provided cell
+MAXSTEPS_INITIAL = 10000 # Maximum steps for the optional initial relaxation of the provided cell
+FMAX_STRAIN = 1e-5 # Force tolerance for the relaxation of internal coordinates during strain steps (in all methods except energy-full)
+MAXSTEPS_STRAIN = 200 # Maximum steps for the relaxation of internal coordinates during strain steps (in all methods except energy-full)
+ELASTIC_CONSTANTS_ERROR_TOLERANCE = 0.01 # Relative tolerance for elasticity matrix. The maximum error in elastic constants must be no 
+# larger than this fraction of the largest component of the matrix
+
+# Encoding of symmetry restrictions on elasticity matrices.
 # The keys are the Voigt indices of non-independent components.
 # The values are a pair of lists representing the linear combination
 # of the unique compoonents that is used to determine the non-unique component
@@ -193,12 +207,29 @@ HEXAGONAL_EQN = {
     (6,6):([0.5,-0.5],[(1,1),(1,2)])
 }
 
-TRIGONAL_EQN = {
-    (1,4):None,
+TRIGONAL_CLASS_32_EQN = {
+    (1,5):None,
     (1,6):None,
     (2,2):([1],[(1,1)]),
     (2,3):([1],[(1,3)]),
-    (2,4):None,
+    (2,4):([-1],[(1,4)]),
+    (2,5):None,
+    (2,6):None,   
+    (3,4):None,
+    (3,5):None,
+    (3,6):None,
+    (4,5):None,
+    (4,6):None,
+    (5,5):([1],[(4,4)]),
+    (5,6):([1],[(1,4)]),
+    (6,6):([0.5,-0.5],[(1,1),(1,2)])
+}
+
+TRIGONAL_CLASS_3_EQN = {
+    (1,6):None,
+    (2,2):([1],[(1,1)]),
+    (2,3):([1],[(1,3)]),
+    (2,4):([-1],[(1,4)]),
     (2,5):([-1],[(1,5)]),
     (2,6):None,   
     (3,4):None,
@@ -207,11 +238,11 @@ TRIGONAL_EQN = {
     (4,5):None,
     (4,6):([-1],[(1,5)]),
     (5,5):([1],[(4,4)]),
-    (5,6):None,
+    (5,6):([1],[(1,4)]),
     (6,6):([0.5,-0.5],[(1,1),(1,2)])
 }
 
-TETRAGONAL_EQN = {
+TETRAGONAL_CLASS_4MM_EQN = {
     (1,4):None,
     (1,5):None,
     (1,6):None,
@@ -220,6 +251,23 @@ TETRAGONAL_EQN = {
     (2,4):None,
     (2,5):None,
     (2,6):None,
+    (3,4):None,
+    (3,5):None,
+    (3,6):None,
+    (4,5):None,
+    (4,6):None,
+    (5,5):([1],[(4,4)]),
+    (5,6):None,
+}
+
+TETRAGONAL_CLASS_4_EQN = {
+    (1,4):None,
+    (1,5):None,
+    (2,2):([1],[(1,1)]),
+    (2,3):([1],[(1,3)]),
+    (2,4):None,
+    (2,5):None,
+    (2,6):([-1],[(1,6)]),
     (3,4):None,
     (3,5):None,
     (3,6):None,
@@ -257,8 +305,20 @@ MONOCLINIC_EQN = {
 
 TRICLINIC_EQN = {}
 
+ELASTICITY_MATRIX_EQNS = (
+    CUBIC_EQN,
+    HEXAGONAL_EQN,
+    TRIGONAL_CLASS_32_EQN,
+    TRIGONAL_CLASS_3_EQN,
+    TETRAGONAL_CLASS_4MM_EQN,
+    TETRAGONAL_CLASS_4_EQN,
+    ORTHORHOMBIC_EQN,
+    MONOCLINIC_EQN,
+    TRICLINIC_EQN
+    )
+
 # error check typing in the above dicts
-for eqn in CUBIC_EQN,HEXAGONAL_EQN,TRIGONAL_EQN,TETRAGONAL_EQN,ORTHORHOMBIC_EQN,MONOCLINIC_EQN,TRICLINIC_EQN:
+for eqn in ELASTICITY_MATRIX_EQNS:
     assert(sorted(list(set(eqn.keys())))==sorted(list(eqn.keys()))) # only unique keys
     # check that all components appearing in RHS of relations are independent, i.e. they don't appear as a key
     for dependent_component in eqn:
@@ -266,7 +326,7 @@ for eqn in CUBIC_EQN,HEXAGONAL_EQN,TRIGONAL_EQN,TETRAGONAL_EQN,ORTHORHOMBIC_EQN,
             for independent_component in eqn[dependent_component][1]:
                 assert not(independent_component in eqn)
 
-def get_unique_components_and_reconstruct_matrix(elastic_constants,space_group_number):
+def get_unique_components_and_reconstruct_matrix(elastic_constants: npt.ArrayLike, space_group_number: int) -> Tuple[List[str],List[float],float]:
     """
     From an elasticity matrix in Voigt order and a space group number, extract the
     elastic constants that should be unique (cij where first i is as low as possible, then j)
@@ -277,7 +337,7 @@ def get_unique_components_and_reconstruct_matrix(elastic_constants,space_group_n
     Returns:
         * Names of unique elastic constants
         * List of unique elastic constants
-        * Reconstructed matrix
+        * Maximum deviation from symmetry
     """
     assert(0 < space_group_number < 231)
 
@@ -287,10 +347,14 @@ def get_unique_components_and_reconstruct_matrix(elastic_constants,space_group_n
         eqn = MONOCLINIC_EQN
     elif space_group_number < 75:
         eqn = ORTHORHOMBIC_EQN
+    elif space_group_number < 89:
+        eqn = TETRAGONAL_CLASS_4_EQN
     elif space_group_number < 143:
-        eqn = TETRAGONAL_EQN
+        eqn = TETRAGONAL_CLASS_4MM_EQN        
+    elif space_group_number < 149:
+        eqn = TRIGONAL_CLASS_3_EQN
     elif space_group_number < 168:
-        eqn = TRIGONAL_EQN
+        eqn = TRIGONAL_CLASS_32_EQN
     elif space_group_number < 195:
         eqn = HEXAGONAL_EQN
     else:
@@ -318,19 +382,17 @@ def get_unique_components_and_reconstruct_matrix(elastic_constants,space_group_n
     
     reconstructed_matrix = reconstructed_matrix + reconstructed_matrix.T - np.diag(reconstructed_matrix.diagonal())
 
-    print ("\n########################################################################\n"
-           "MAXIMUM DEVIATION FROM CRYSTAL SYMMETRY AND MATERIAL FRAME INDIFFERENCE: %f\n"%np.max(reconstructed_matrix-elastic_constants)+
-           "########################################################################\n")
+    maximum_deviation = np.max(np.abs(reconstructed_matrix-elastic_constants))
 
-    return elastic_constants_names,elastic_constants_values,reconstructed_matrix
+    return elastic_constants_names,elastic_constants_values,maximum_deviation
                 
-def minimize_PreconLBFGS(supercell, fmax=0.05, smax=0.05, steps=100000000, \
-                         variable_cell_flag=True, logfile='-'):
+def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
+                         variable_cell:bool=True, logfile:Optional[Union[str,IO]]='-') -> None:
     """
-    Use PreconLBFGS to Minimize cell energy with respect to cell shape and
+    Use LBFGSLineSearch to Minimize cell energy with respect to cell shape and
     internal atom positions.
 
-    PreconLBGS convergence behavior is as follows:
+    LBFGSLineSearch convergence behavior is as follows:
     - The solver returns True if it is able to converge within the optimizer
       iteration limits (which can be changed by the `steps` argument passed
       to `run`), otherwise it returns False.
@@ -345,44 +407,73 @@ def minimize_PreconLBFGS(supercell, fmax=0.05, smax=0.05, steps=100000000, \
     limit, or a stalled minimization due to line search failures.
 
     Parameters:
-        supercell : ASE Atoms object
+        supercell:
             Atomic configuration to be minimized.
-        fmax : float
+        fmax:
             Force convergence tolerance (the magnitude of the force on each
             atom must be less than this for convergence)
-        smax : float
-            Stress convergence tolerance (each component of the stress tensor
-            must be less than this for converfence)
-        steps : int
+        steps:
             Maximum number of iterations for the minimization
-        variable_cell_flag : bool
+        variable_cell:
             True to allow relaxation with respect to cell shape
-
-    Returns:
-        iteration_limits_reached : bool
-            True if iteration limit was reached before the forces and stresses
-            achieved the convergence target
-        minimization_stalled : bool
-            True if an exception was raised indicating that the minimization
-            stalled due to a line search failure
     """
-    opt = PreconLBFGS(supercell, variable_cell=variable_cell_flag, logfile=logfile)
-#@  supercell_wrapped = ExpCellFilter(supercell)
-#@  opt = PreconLBFGS(supercell_wrapped)
+    if variable_cell:
+        supercell_wrapped = ExpCellFilter(supercell)
+        opt = LBFGSLineSearch(supercell_wrapped, logfile=logfile)
+    else:
+        opt = LBFGSLineSearch(supercell, logfile=logfile)
     try:
-        converged = opt.run(fmax=fmax, smax=smax, steps=steps)
+        converged = opt.run(fmax=fmax, steps=steps)
         iteration_limits_reached = not converged
         minimization_stalled = False
-    except:
+    except Exception as e:
         minimization_stalled = True
-        iteration_limits_reached = False        
+        iteration_limits_reached = False
+        print()
+        print("The following exception was caught during minimization:")
+        print(repr(e))
+        print()
 
     print("Minimization "+
-        ("converged" if not minimization_stalled else "stalled")+
+        ("stalled" if minimization_stalled else "stopped" if iteration_limits_reached else "converged")+
         " after "+
         (("hitting the maximum of "+str(steps)) if iteration_limits_reached else str(opt.nsteps))+
         " steps.")
-    return iteration_limits_reached, minimization_stalled
+    
+    if minimization_stalled or iteration_limits_reached:
+        print()
+        print("Final forces:")
+        print(supercell.get_forces())
+        print()
+        print("Final stress:")
+        print(supercell.get_stress())
+        print()
+
+def energy_hessian_add_prefactors(hessian: npt.ArrayLike, hessian_error_estimate: npt.ArrayLike) -> Tuple[npt.ArrayLike,npt.ArrayLike]:
+    """
+    Hessian was computed as d^2 W / d eps_m d eps_n.
+    As noted in the module doc string, a prefactor is required for some terms
+    to obtain the elastic constants
+
+    Returns:
+        * 6x6 elasticity matrix in Voigt order
+        * 6x6 error estimate in Voigt order
+    """
+    elastic_constants = np.zeros(shape=(6,6))
+    error_estimate = np.zeros(shape=(6,6))
+    for m in range(6):
+        if m<3:
+            factm = 1.0
+        else:
+            factm = 0.5
+        for n in range(6):
+            if n<3:
+                fact = factm
+            else:
+                fact = factm*0.5
+            elastic_constants[m,n] = fact*hessian[m,n]
+            error_estimate[m,n] = fact*hessian_error_estimate[m,n]
+    return elastic_constants, error_estimate
 
 class ElasticConstants(object):
     """
@@ -390,24 +481,17 @@ class ElasticConstants(object):
     through numerical differentiation
     """
 
-    def __init__(self, supercell, condensed_minimization_method='bfgs'):
+    def __init__(self, supercell: Atoms):
         """
         Class containing data and routines for elastic constant calculations
 
         Parameters:
-            calc : ASE Atoms object
+            supercell:
                 ASE atoms object with calculator attached. This object
                 contains the structure for which the elastic constant will be
                 computed.
-            condensed_minimization_method : string
-                Used to define the minimization method to be used when relaxing
-                out internal atom positions for a set strain. Two methods are
-                supported:
-                'bfgs'  : Use the native ASE Precon_LBFGS solver (default)
-                'scipy' : Use the scipy default minimize method
         """
         self.supercell = supercell
-        self.condensed_minimization_method = condensed_minimization_method
         self.natoms = supercell.get_global_number_of_atoms()
         # Store the original reference cell structure and volume, and atom
         # positions. These will overwritten if an initial cell relaxation is
@@ -416,17 +500,17 @@ class ElasticConstants(object):
         self.o_volume = self.supercell.get_volume()
         self.refpositions = self.supercell.get_positions()
 
-    def voigt_to_matrix(self, voigt_vec):
+    def voigt_to_matrix(self, voigt_vec: npt.ArrayLike) -> npt.ArrayLike:
         """
         Convert a voigt notation vector to a matrix
 
         Parameters:
-            voigt_vec : float
+            voigt_vec:
                 A numpy array containing the six strain components in
                 Voigt ordering (xx, yy, zz, yz, xz, xy)
 
         Returns:
-            matrix : float
+            matrix:
                A 3x3 numpy array containg the strain tensor components
         """
         matrix = np.zeros((3, 3))
@@ -438,36 +522,37 @@ class ElasticConstants(object):
         matrix[tuple([[0, 1], [1, 0]])] = voigt_vec[5]
         return matrix
 
-    def get_energy_from_positions(self, pos):
+    def get_energy_from_positions(self, pos: npt.ArrayLike) -> float:
         """
         Compute the supercell energy, given a set of positions for the
         internal atoms.
 
         Parameters:
-            pos : float
+            pos:
                 A numpy array containing the positions of all atoms in a
                 flat concatenated form
 
         Returns:
-            energy : float
+            energy:
                Potential energy of the supercell
         """
         self.supercell.set_positions(np.reshape(pos, (self.natoms, 3)))
         energy = self.supercell.get_potential_energy()
+
         return energy
 
-    def get_gradient_from_positions(self, pos):
+    def get_gradient_from_positions(self, pos: npt.ArrayLike) -> npt.ArrayLike:
         """
         Compute the gradient of the supercell energy, given a set of positions
         for the internal atoms.
 
         Parameters:
-            pos : float
+            pos:
                 A numpy array containing the positions of all atoms in a
                 flat concatenated form
 
         Returns:
-            gradient : float
+            gradient:
                The gradient of the potential energy of the force (the negative
                of the forces) in a flat concatenated form
         """
@@ -475,20 +560,20 @@ class ElasticConstants(object):
         forces = self.supercell.get_forces()
         return -forces.flatten()
 
-    def get_energy_from_strain_and_atom_displacements(self, strain_and_disps_vec):
+    def get_energy_from_strain_and_atom_displacements(self, strain_and_disps_vec: npt.ArrayLike) -> float:
         """
         Compute reference strain energy density for a given applied strain
         and internal atom positions for all but one atom constrained to
         prevent rigid-body translation.
 
         Parameters:
-            strain_and_disps_vec : float
+            strain_and_disps_vec:
                 A numpy array of length 6+(natoms-1)*3 containing the
                 strain components in Voigt order and the free internal
                 atom degrees of freedom
 
         Returns:
-            energy density : float
+            energy density:
                 Potential energy of the supercell divided by its reference
                 (unstrained) volume
         """
@@ -516,20 +601,54 @@ class ElasticConstants(object):
 
         return energy / self.o_volume
 
-    def get_energy_from_strain(self, strain_vec):
+    def get_elasticity_matrix_and_error_energy_full(self, step: Union[MaxStepGenerator, float]) -> Tuple[npt.ArrayLike,npt.ArrayLike]:
+        """
+        Compute elastic constants from the full Hessian
+        relative to both strains and internal atom degrees of
+        freedom. This is followed by an algebraic manipulation to
+        account for the effect of atom relaxation on elastic
+        constants.
+
+        Returns:
+            * 6x6 elasticity matrix in Voigt order
+            * 6x6 error estimate in Voigt order
+        """
+        hess = ndt.Hessian(self.get_energy_from_strain_and_atom_displacements, step=step, full_output=True)
+        fullhessian, info = \
+            hess(np.zeros(6+(self.natoms-1)*3, dtype=float))
+        fullhessian_error_estimate = info.error_estimate
+        # Separate full Hessian into blocks
+        # (eps-eps, eps-disp, disp-disp)
+        hess_ee = fullhessian[0:6,0:6]
+        hess_ed = fullhessian[0:6,6:]
+        hess_dd = fullhessian[6:,6:]
+        # Invert disp-disp block
+        hess_dd_inv = inv(hess_dd)
+        # Compute hessian accounting for basis atom relaxation. based
+        # on Eqn (27) in Tadmor et al, Phys. Rev. B, 59:235-245, 1999.
+        hessian = hess_ee - np.dot(np.dot(hess_ed, hess_dd_inv), \
+                                    np.transpose(hess_ed))
+        #TODO: Figure out how to estimate error of Hessian based on
+        #      full Hessian errors in fullhessian_error_estimate
+        #      Now just taken errors for hess_ee which is incorrect.
+        hessian_error_estimate = info.error_estimate[0:6,0:6]
+        return energy_hessian_add_prefactors(hessian, hessian_error_estimate)
+
+    def get_energy_from_strain(self, strain_vec: npt.ArrayLike) -> float:
         """
         Compute reference strain energy density for a given applied strain.
 
         Parameters:
-            strain_vec : float
+            strain_vec:
                 A numpy array of length 6 containing the strain components in
                 Voigt order
 
         Returns:
-            energy density : float
+            energy density:
                 Potential energy of the supercell divided by its reference
                 (unstrained) volume
         """
+
         self.supercell.set_cell(self.o_cell, scale_atoms=False)
         self.supercell.set_positions(self.refpositions)
         strain_mat = self.voigt_to_matrix(strain_vec)
@@ -538,60 +657,101 @@ class ElasticConstants(object):
         self.supercell.set_cell(new_cell, scale_atoms=True)
 
         if self.natoms > 1:
-            if self.condensed_minimization_method == 'scipy':
-                pos0 = self.supercell.get_positions().flatten()
-                res = minimize(
-                    self.get_energy_from_positions,
-                    pos0,
-                    jac=self.get_gradient_from_positions
-                )
-                energy = res["fun"]
-            elif self.condensed_minimization_method == 'bfgs':
-                fmax = 1e-5
-                smax = 1e-5
-                steps=100000000
-                iteration_limits_reached = True
-                while iteration_limits_reached:
-                    iteration_limits_reached, minimization_stalled =      \
-                        minimize_PreconLBFGS(self.supercell, fmax=fmax,   \
-                        smax=smax, steps=steps, variable_cell_flag=False, \
-                        logfile=None)
-                energy = self.supercell.get_potential_energy()
-            else:
-                raise RuntimeError('Unknown condensed minimization method =', self.condensed_minimization_method)
+            minimize_wrapper(self.supercell, fmax=FMAX_STRAIN, steps=MAXSTEPS_STRAIN, variable_cell=False, logfile=None)                        
+            energy = self.supercell.get_potential_energy()
         else:
             energy = self.supercell.get_potential_energy()
 
         return energy / self.o_volume
 
-    def get_stress_from_strain(self, strain_vec):
+    def get_elasticity_matrix_and_error_energy_condensed(self, step: Union[MaxStepGenerator, float]) -> Tuple[npt.ArrayLike,npt.ArrayLike]:
+        """
+        Compute elastic constants from the Hessian
+        of the condensed strain energy density (i.e. the enregy for
+        a given strain is relaxed with respect to internal atom
+        positions)
+
+        Returns:
+            * 6x6 elasticity matrix in Voigt order
+            * 6x6 error estimate in Voigt order
+        """
+        hess = ndt.Hessian(self.get_energy_from_strain, step=step, full_output=True)
+        hessian, info = hess(np.zeros(6, dtype=float))
+        return energy_hessian_add_prefactors(hessian, info.error_estimate)
+
+    def get_stress_from_strain(self, strain_vec: npt.ArrayLike) -> npt.ArrayLike:
         """
         Compute stress for a given applied strain.
 
         Parameters:
-            strain_vec : float
+            strain_vec:
                 A numpy array of length 6 containing the strain components in
                 Voigt order
 
         Returns:
-            stress : float
+            stress:
                 Cauchy stress of the supercell
         """
         energy = self.get_energy_from_strain(strain_vec)
         stress = self.supercell.get_stress()
         return stress
 
-    def results(self, optimize=False, method="energy-condensed"):
+    def get_elasticity_matrix_and_error_stress(self, step: Union[MaxStepGenerator, float]) -> Tuple[npt.ArrayLike,npt.ArrayLike]:
+        """
+        Compute elastic constants from the Jacobian
+        of the condensed stress (i.e. the stress for a given strain
+        where the energy is relaxed with respect to internal atom
+        positions)
+
+        Returns:
+            * 6x6 elasticity matrix in Voigt order
+            * 6x6 error estimate in Voigt order
+        """
+        jac = ndt.Jacobian(self.get_stress_from_strain, step=step, full_output=True)
+        hessian, info = jac(np.zeros(6, dtype=float))
+        hessian_error_estimate = info.error_estimate
+
+        elastic_constants = np.zeros(shape=(6,6))
+        error_estimate = np.zeros(shape=(6,6))
+
+        # Hessian was computed as d sig_m / d eps_n.
+        # As noted in the module doc string, a prefactor is required for some terms
+        # to obtain the elastic constants
+        for m in range(6):
+            for n in range(6):
+                if n<3:
+                    fact = 1.0
+                else:
+                    fact = 0.5
+                elastic_constants[m,n] = fact*hessian[m,n]
+                error_estimate[m,n] = fact*hessian_error_estimate[m,n]
+        # The elastic constants matrix should be symmetric, however due to
+        # numerical precision issues in the stress components, in general,
+        # d sig m / d eps_n will not equal d sig_n / d eps_m.
+        # To address this, symmetrize the elastic constants matrix.
+        for m in range(5):
+            for n in range(m+1,6):
+                con = 0.5*(elastic_constants[m,n] + elastic_constants[n,m])
+                err = 0.5*(error_estimate[m,n] + error_estimate[n,m])
+                elastic_constants[m,n] = con
+                elastic_constants[n,m] = con
+                error_estimate[m,n] = err
+                error_estimate[n,m] = err
+
+        return elastic_constants, error_estimate
+    
+    def results(self, optimize:bool=False, method:str="energy-condensed", escalate:bool=False, space_group:int=1) -> \
+        Tuple[npt.ArrayLike,npt.ArrayLike,List[str],List[float]]:
         """
         Compute the elastic constants of supercell, relaxed if requested,
         using numerical differentiation
 
         Parameters:
-            optimize : boolean
+            optimize:
                 If set to True, first minimize the energy of the supercell
                 subject to strain and internal atom positions. Otherwise,
                 compute the elastic constants for the as provided structure.
-            method : string
+            method:
                 Select method for computing the elastic constants. The following
                 methods are supported:
                 'energy-condensed' : Compute elastic constants from the Hessian
@@ -617,28 +777,36 @@ class ElasticConstants(object):
                 accurate. The 'energy-full' method has accuracy comparable
                 to 'energy-condensed' but tends to be much slower due to the
                 larger Hessian matrix that has to be computed.
+            escalate:
+                If true and the method you chose produces errors that are too large or
+                raises an error, automatically attempt to escalate to the more accurate method
+                (stress-condensed-fast -> stress-condensed -> energy-condensed -> energy-full)
+            space_group:
+                Space group of the crystal for checking that the elastic constants obey material
+                symmetry. A setting of 1 (default) means "no symmetry" and can be used if
+                the crystal symmetry is unknown or if you do not wish to perform this check.
+                To use this, the simulation cell must be in standard IUCr orientation.            
 
         Returns:
-            elastic_constants : float
+            elastic_constants:
                 A 6x6 numpy array containing the elastic constants matrix
                 in Voigt ordering. Units are the default returned by the
                 calculator.
-            estimated_error : float
+            estimated_error:
                 A 6x6 numpy array containing the standard error in the elastic
                 constants returned by numdifftools. Same units as
                 elastic_constants.
+            elastic_constants_names:
+                Names of unique elastic constants for the provided crystal symmetry
+            elastic_constants_values:
+                List of unique elastic constants            
         """
+        assert method in ('energy-condensed','stress-condensed','stress-condensed-fast','energy-full'), \
+            "Unknown computation method. Supported methods: 'energy-condensed','stress-condensed','stress-condensed-fast','energy-full'"
+
         if optimize:
-            fmax = 1e-5
-            smax = 1e-5
-            steps=100000000
-            iteration_limits_reached = True
-            while iteration_limits_reached:
-                iteration_limits_reached, minimization_stalled = \
-                    minimize_PreconLBFGS(self.supercell, fmax=fmax, smax=smax, \
-                             steps=steps, variable_cell_flag=True)
-            if minimization_stalled:
-                print("WARNING -- Minimization stalled before reaching requested tolerance: fmax={}, smax={}".format(fmax,smax))
+            print("Performing minimization of initial cell...")
+            minimize_wrapper(self.supercell, fmax=FMAX_INITIAL, steps=MAXSTEPS_INITIAL, variable_cell=True)
             self.o_cell = self.supercell.get_cell()
             self.o_volume = self.supercell.get_volume()
             self.refpositions = self.supercell.get_positions()
@@ -657,116 +825,77 @@ class ElasticConstants(object):
                 MaxStepGenerator(
                     base_step=1e-2, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
                 ),
-                1e-4
             ]
 
-        success = True
-        if method=="energy-full":
-            # Compute stiffness matrix using full Hessian that includes
-            # both strain components and internal atom positions
-            func = self.get_energy_from_strain_and_atom_displacements
-            for i in range(len(sg)):
-                hess = ndt.Hessian(func, step=sg[i], full_output=True)
-                try:
-                    fullhessian, info = \
-                        hess(np.zeros(6+(self.natoms-1)*3, dtype=float))
-                    fullhessian_error_estimate = info.error_estimate
-                    # Separate full Hessian into blocks
-                    # (eps-eps, eps-disp, disp-disp)
-                    hess_ee = fullhessian[0:6,0:6]
-                    hess_ed = fullhessian[0:6,6:]
-                    hess_dd = fullhessian[6:,6:]
-                    # Invert disp-disp block
-                    hess_dd_inv = inv(hess_dd)
-                    # Compute hessian accounting for basis atom relaxation. based
-                    # on Eqn (27) in Tadmor et al, Phys. Rev. B, 59:235-245, 1999.
-                    hessian = hess_ee - np.dot(np.dot(hess_ed, hess_dd_inv), \
-                                               np.transpose(hess_ed))
-                    #TODO: Figure out how to estimate error of Hessian based on
-                    #      full Hessian errors in fullhessian_error_estimate
-                    #      Now just taken errors for hess_ee which is incorrect.
-                    hessian_error_estimate = info.error_estimate[0:6,0:6]
-                    break
-                except:
-                    success = False
-
+        if method=="stress-condensed-fast" or method=="stress-condensed":
+            get_elasticity_matrix = self.get_elasticity_matrix_and_error_stress
         elif method=="energy-condensed":
-            # Compute stiffness matrix using condensed energy that is
-            # relaxed with respect to the internal atom positions
-            func = self.get_energy_from_strain
-            for i in range(len(sg)):
-                hess = ndt.Hessian(func, step=sg[i], full_output=True)
-                try:
-                    hessian, info = hess(np.zeros(6, dtype=float))
-                    hessian_error_estimate = info.error_estimate
-                    break
-                except:
-                    success = False
-
-        elif method=="stress-condensed" or method=="stress-condensed-fast":
-            # Compute stiffness matrix using condensed stress that is
-            # relaxed with respect to the internal atom positions
-
-            func = self.get_stress_from_strain
-            for i in range(len(sg)):
-                jac = ndt.Jacobian(func, step=sg[i], full_output=True)
-                try:
-                    hessian, info = jac(np.zeros(6, dtype=float))
-                    hessian_error_estimate = info.error_estimate
-                    break
-                except:
-                    success = False
-
+            get_elasticity_matrix = self.get_elasticity_matrix_and_error_energy_condensed
         else:
-            raise RuntimeError("Unknown method in results: method = "+method)
+            get_elasticity_matrix = self.get_elasticity_matrix_and_error_energy_full
+        
+        successful_calculation = False
 
-        if not success:
-            raise RuntimeError('Unable to compute Hessian for method = ',method)
+        for step in sg:
+            print()
+            print("Attempting to compute elastic constants with method %s and step generator %s" % (method,step))
+            print()
+            try:
+                elastic_constants, error_estimate = get_elasticity_matrix(step)
+            except Exception as e:
+                print()
+                print("The following exception was caught during Hessian or Jacobian calculation:")
+                print(repr(e))
+                print()
+                continue
+            max_el_const = np.max(np.abs(elastic_constants))
+            max_er = np.max(np.abs(error_estimate))
+            if max_er > max_el_const * ELASTIC_CONSTANTS_ERROR_TOLERANCE:
+                print ()
+                print ("Maximum error estimate %f is too big compared to maximum elastic constant component %f and requested fractional tolerance %f." % 
+                       (max_er,max_el_const,ELASTIC_CONSTANTS_ERROR_TOLERANCE))
+                print ()
+                print('Elastic constants:')
+                print(np.array_str(elastic_constants, precision=5, max_line_width=100, suppress_small=True))
+                print()
+                print('Error estimate:')
+                print(np.array_str(error_estimate, precision=5, max_line_width=100, suppress_small=True))
+                print()
+                continue
+            elastic_constants_names, elastic_constants_values, maximum_deviation = get_unique_components_and_reconstruct_matrix(elastic_constants, space_group)
+            if maximum_deviation > max_el_const * ELASTIC_CONSTANTS_ERROR_TOLERANCE:
+                print ()
+                print ("Maximum deviation from material symmetry %f according to space group %d is too big compared to maximum elastic constant component %f and requested fractional tolerance %f." % 
+                       (maximum_deviation,space_group,max_el_const,ELASTIC_CONSTANTS_ERROR_TOLERANCE))
+                print ()
+                print('Elastic constants:')
+                print(np.array_str(elastic_constants, precision=5, max_line_width=100, suppress_small=True))
+                print()
+                continue
+            print ()
+            print ("Maximum deviation from material symmetry: " + str(maximum_deviation))
+            print ()
+            successful_calculation = True
+            break
 
-        elastic_constants = np.zeros(shape=(6,6))
-        error_estimate = np.zeros(shape=(6,6))
-        if method == "energy-condensed" or method == "energy-full":
-            # Hessian was computed as d^2 W / d eps_m d eps_n.
-            # As noted in the doc string, a prefactor is required for some terms
-            # to obtain the elastic constants
-            for m in range(6):
-                if m<3:
-                    factm = 1.0
+        if not successful_calculation:
+            if escalate and (method != "energy-full"):
+                if method == "stress-condensed-fast":
+                    newmethod = "stress-condensed"
+                elif method == "stress-condensed":
+                    newmethod = "energy-condensed"
                 else:
-                    factm = 0.5
-                for n in range(6):
-                    if n<3:
-                        fact = factm
-                    else:
-                        fact = factm*0.5
-                    elastic_constants[m,n] = fact*hessian[m,n]
-                    error_estimate[m,n] = fact*hessian_error_estimate[m,n]
-        elif method == "stress-condensed" or method == "stress-condensed-fast":
-            # Hessian was computed as d sig_m / d eps_n.
-            # As noted in the doc string, a prefactor is required for some terms
-            # to obtain the elastic constants
-            for m in range(6):
-                for n in range(6):
-                    if n<3:
-                        fact = 1.0
-                    else:
-                        fact = 0.5
-                    elastic_constants[m,n] = fact*hessian[m,n]
-                    error_estimate[m,n] = fact*hessian_error_estimate[m,n]
-            # The elastic constants matrix should be symmetric, however due to
-            # numerical precision issues in the stress components, in general,
-            # d sig m / d eps_n will not equal d sig_n / d eps_m.
-            # To address this, symmetrize the elastic constants matrix.
-            for m in range(5):
-                for n in range(m+1,6):
-                    con = 0.5*(elastic_constants[m,n] + elastic_constants[n,m])
-                    err = 0.5*(error_estimate[m,n] + error_estimate[n,m])
-                    elastic_constants[m,n] = con
-                    elastic_constants[n,m] = con
-                    error_estimate[m,n] = err
-                    error_estimate[n,m] = err
+                    newmethod = "energy-full"
+                print ()
+                print ("Unable to compute elastic constants with method %s, escalating to method %s"%(method,newmethod))
+                print ()
+                return self.results(optimize = False, method = newmethod, space_group = space_group)
+            else:
+                print ()
+                print ("Warning: unsuccessful calculation reported, elastic constants may not be accurate")
+                print ()
 
-        return elastic_constants, error_estimate
+        return elastic_constants, error_estimate, elastic_constants_names, elastic_constants_values
 
 def calc_bulk(elastic_constants):
     """
@@ -787,7 +916,10 @@ def calc_bulk(elastic_constants):
     # Compute bulk modulus, based on exercise 6.14 in Tadmor, Miller, Elliott,
     # Continuum Mechanics and Thermodynamics, Cambridge University Press, 2012.
     if matrix_rank(elastic_constants[3:,0:3]) == 0: #block diagonal matrix, only invert first 3x3 block
-        compliance = inv(elastic_constants[0:3,0:3])
+        if matrix_rank(elastic_constants[0:3,0:3]) < 3:
+            return 0. # zero bulk modulus
+        else:
+            compliance = inv(elastic_constants[0:3,0:3])
     else:
         compliance = inv(elastic_constants)
     bulk = 1/np.sum(compliance[0:3,0:3])
@@ -833,8 +965,6 @@ def find_nearest_isotropy(elastic_constants):
             Isotropic shear modulus
     """
     E0 = 1.0  # arbitrary scaling constant (result unaffected by it)
-
-    I3 = np.diag([1.0,1.0,1.0])
 
     JJ = np.zeros(shape=(6,6))
     KK = np.zeros(shape=(6,6))
