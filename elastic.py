@@ -874,7 +874,7 @@ class ElasticConstants(object):
                 print("The following exception was caught during Hessian or Jacobian calculation:")
                 print(repr(e))
                 print()
-                break
+                continue
             max_el_const = np.max(np.abs(elastic_constants))
             max_std_er = np.max(np.abs(error_estimate))/2 # numdifftools-provided errors are 95% confidence and can be quite big. Use standard error
             if max_std_er > max_el_const * ELASTIC_CONSTANTS_ERROR_TOLERANCE:
