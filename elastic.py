@@ -142,14 +142,15 @@ import numpy as np
 import numpy.typing as npt
 from numpy.linalg import inv
 from numpy.linalg import eig
-from numpy.linalg import matrix_rank
+from numpy.linalg import matrix_rank, LinAlgError
 from ase.optimize import LBFGSLineSearch
 from ase.constraints import ExpCellFilter
 from ase.atoms import Atoms
 import numdifftools as ndt
 from numdifftools.step_generators import MaxStepGenerator
 import math
-from typing import Optional, Union, IO, Tuple, List
+from typing import Optional, Union, IO, Tuple, List, Dict
+from sys import float_info
 
 FMAX_INITIAL = 1e-5 # Force tolerance for the optional initial relaxation of the provided cell
 MAXSTEPS_INITIAL = 10000 # Maximum steps for the optional initial relaxation of the provided cell
@@ -740,8 +741,10 @@ class ElasticConstants(object):
 
         return elastic_constants, error_estimate
     
-    def results(self, optimize:bool=False, method:str="energy-condensed", escalate:bool=False, space_group:int=1) -> \
-        Tuple[npt.ArrayLike,npt.ArrayLike,List[str],List[float]]:
+    def results(self, optimize:bool=False, method:str="energy-condensed", escalate:bool=False, space_group:int=1, 
+                sg_override: Optional[Union[List[Union[MaxStepGenerator, float]],Union[MaxStepGenerator, float]]] = None,
+                best_run_so_far: Optional[Tuple] = None) -> \
+        Tuple[npt.ArrayLike,npt.ArrayLike,List[str],List[float],float]:
         """
         Compute the elastic constants of supercell, relaxed if requested,
         using numerical differentiation
@@ -785,7 +788,13 @@ class ElasticConstants(object):
                 Space group of the crystal for checking that the elastic constants obey material
                 symmetry. A setting of 1 (default) means "no symmetry" and can be used if
                 the crystal symmetry is unknown or if you do not wish to perform this check.
-                To use this, the simulation cell must be in standard IUCr orientation.            
+                To use this, the simulation cell must be in standard IUCr orientation.
+            sg_override:
+                Optionally override the default steps chosen by this driver
+            best_run_so_far:
+                This function is run recursively to escalate the accuracy of the method used. Sometimes the notionally
+                more accurate methods do not result in a better result (notably for potentials with long range electrostatics),
+                so this allows us to back up to the best result. Therefore, it can take the tuple in the same format as its own results.                
 
         Returns:
             elastic_constants:
@@ -799,33 +808,52 @@ class ElasticConstants(object):
             elastic_constants_names:
                 Names of unique elastic constants for the provided crystal symmetry
             elastic_constants_values:
-                List of unique elastic constants            
+                List of unique elastic constants          
+            maximum_deviation:
+                Maximum deviation from material symmetry and frame indifference
         """
         assert method in ('energy-condensed','stress-condensed','stress-condensed-fast','energy-full'), \
             "Unknown computation method. Supported methods: 'energy-condensed','stress-condensed','stress-condensed-fast','energy-full'"
 
         if optimize:
             print("Performing minimization of initial cell...")
+            print()
             minimize_wrapper(self.supercell, fmax=FMAX_INITIAL, steps=MAXSTEPS_INITIAL, variable_cell=True)
+            print()
+            print("Minimized fractional positions:")
+            print(self.supercell.get_scaled_positions())
+            print()
+            print("Minimized cell parameters:")
+            print(self.supercell.cell)
+            print()
             self.o_cell = self.supercell.get_cell()
             self.o_volume = self.supercell.get_volume()
             self.refpositions = self.supercell.get_positions()
 
-        # Define different step generators for numerical differentiation to try
-        if method=="stress-condensed-fast":
-            sg = [1e-4]
+        if sg_override is not None:
+            if isinstance(sg_override,list):
+                sg = sg_override
+            else:
+                sg = [sg_override]
         else:
-            sg = [
-                MaxStepGenerator(
-                    base_step=1e-4, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
-                ),
-                MaxStepGenerator(
-                    base_step=1e-3, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
-                ),
-                MaxStepGenerator(
-                    base_step=1e-2, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
-                ),
-            ]
+            # Define different step generators for numerical differentiation to try
+            if method=="stress-condensed-fast":
+                sg = [1e-4]
+            else:
+                sg = [
+                    MaxStepGenerator(
+                        base_step=1e-4, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
+                    ),
+                    MaxStepGenerator(
+                        base_step=1e-3, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
+                    ),
+                    MaxStepGenerator(
+                        base_step=1e-2, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
+                    ),
+                    1e-4,
+                    1e-3,
+                    1e-2,
+                ]
 
         if method=="stress-condensed-fast" or method=="stress-condensed":
             get_elasticity_matrix = self.get_elasticity_matrix_and_error_stress
@@ -834,9 +862,8 @@ class ElasticConstants(object):
         else:
             get_elasticity_matrix = self.get_elasticity_matrix_and_error_energy_full
         
-        successful_calculation = False
-
         for step in sg:
+            successful_calculation = True
             print()
             print("Attempting to compute elastic constants with method %s and step generator %s" % (method,step))
             print()
@@ -847,36 +874,54 @@ class ElasticConstants(object):
                 print("The following exception was caught during Hessian or Jacobian calculation:")
                 print(repr(e))
                 print()
-                continue
+                break
             max_el_const = np.max(np.abs(elastic_constants))
-            max_er = np.max(np.abs(error_estimate))
-            if max_er > max_el_const * ELASTIC_CONSTANTS_ERROR_TOLERANCE:
-                print ()
-                print ("Maximum error estimate %f is too big compared to maximum elastic constant component %f and requested fractional tolerance %f." % 
-                       (max_er,max_el_const,ELASTIC_CONSTANTS_ERROR_TOLERANCE))
-                print ()
-                print('Elastic constants:')
-                print(np.array_str(elastic_constants, precision=5, max_line_width=100, suppress_small=True))
+            max_std_er = np.max(np.abs(error_estimate))/2 # numdifftools-provided errors are 95% confidence and can be quite big. Use standard error
+            if max_std_er > max_el_const * ELASTIC_CONSTANTS_ERROR_TOLERANCE:
                 print()
-                print('Error estimate:')
+                print("Maximum standard error estimate (1/2 of the error given by numdifftools) %f \n"
+                      "is too big compared to maximum elastic constant component %f (internal units) and requested fractional tolerance %f." % 
+                       (max_std_er,max_el_const,ELASTIC_CONSTANTS_ERROR_TOLERANCE))
+                print()
+                print('Error estimate (internal units):')
                 print(np.array_str(error_estimate, precision=5, max_line_width=100, suppress_small=True))
-                print()
-                continue
+                print()       
+                successful_calculation = False
             elastic_constants_names, elastic_constants_values, maximum_deviation = get_unique_components_and_reconstruct_matrix(elastic_constants, space_group)
             if maximum_deviation > max_el_const * ELASTIC_CONSTANTS_ERROR_TOLERANCE:
-                print ()
-                print ("Maximum deviation from material symmetry %f according to space group %d is too big compared to maximum elastic constant component %f and requested fractional tolerance %f." % 
-                       (maximum_deviation,space_group,max_el_const,ELASTIC_CONSTANTS_ERROR_TOLERANCE))
-                print ()
-                print('Elastic constants:')
-                print(np.array_str(elastic_constants, precision=5, max_line_width=100, suppress_small=True))
                 print()
-                continue
-            print ()
-            print ("Maximum deviation from material symmetry: " + str(maximum_deviation))
-            print ()
-            successful_calculation = True
-            break
+                print("Maximum deviation from material symmetry %f according to space group %d is too big compared to maximum elastic constant component %f (internal units) and requested fractional tolerance %f." % 
+                      (maximum_deviation,space_group,max_el_const,ELASTIC_CONSTANTS_ERROR_TOLERANCE))                
+                print()
+                print("Maximum deviation from material symmetry (internal units): " + str(maximum_deviation))
+                print()
+                successful_calculation = False
+
+            if successful_calculation:
+                break
+                # No need to report anything because we will exit to final report
+            else:
+                # Report elastic constants to give context to the messages above
+                print()
+                print ('Elastic constants (internal units):')
+                print (np.array_str(elastic_constants, precision=5, max_line_width=100, suppress_small=True))
+                print()
+                
+                # We did not reach the desired tolerances, but save the current run anyway in case it's the best we get
+                current_run_is_best = True
+                if best_run_so_far is not None:
+                    max_std_er_best_run = np.max(np.abs(best_run_so_far[1]))/2
+                    maximum_deviation_best_run = best_run_so_far[4]
+                    # try to lower the maximum error, either in interpolation, or in symmetry
+                    if abs(max_std_er-max_std_er_best_run) <= float_info.epsilon: 
+                        # for single-step differentiations on energy-full and energy-condensed, errors will be identical, so I want to only look at maximum_deviation
+                        if maximum_deviation > maximum_deviation_best_run:
+                            current_run_is_best = False
+                    elif max(max_std_er,maximum_deviation) > max(max_std_er_best_run,maximum_deviation_best_run):
+                            current_run_is_best = False
+                
+                if current_run_is_best:
+                    best_run_so_far = elastic_constants, error_estimate, elastic_constants_names, elastic_constants_values, maximum_deviation
 
         if not successful_calculation:
             if escalate and (method != "energy-full"):
@@ -888,14 +933,20 @@ class ElasticConstants(object):
                     newmethod = "energy-full"
                 print ()
                 print ("Unable to compute elastic constants with method %s, escalating to method %s"%(method,newmethod))
-                print ()
-                return self.results(optimize = False, method = newmethod, space_group = space_group)
+                print ()                
+                return self.results(optimize = False, method = newmethod, escalate = True, space_group = space_group, sg_override = sg_override, best_run_so_far = best_run_so_far)
             else:
                 print ()
-                print ("Warning: unsuccessful calculation reported, elastic constants may not be accurate")
+                print ("Warning: unsuccessful calculation reported, elastic constants may not be accurate.")
+                print ("A previous attempt may have ben better while still not satisfying tolerance. Checking...")
                 print ()
+                # We are returning an unsuccessful calculation. See if we have a better one to back off to
+                if not current_run_is_best:
+                    print("Backing off to a previous run!")
+                    print()
+                    return best_run_so_far
 
-        return elastic_constants, error_estimate, elastic_constants_names, elastic_constants_values
+        return elastic_constants, error_estimate, elastic_constants_names, elastic_constants_values, maximum_deviation
 
 def calc_bulk(elastic_constants):
     """
@@ -915,14 +966,19 @@ def calc_bulk(elastic_constants):
     """
     # Compute bulk modulus, based on exercise 6.14 in Tadmor, Miller, Elliott,
     # Continuum Mechanics and Thermodynamics, Cambridge University Press, 2012.
-    if matrix_rank(elastic_constants[3:,0:3]) == 0: #block diagonal matrix, only invert first 3x3 block
-        if matrix_rank(elastic_constants[0:3,0:3]) < 3:
-            return 0. # zero bulk modulus
-        else:
-            compliance = inv(elastic_constants[0:3,0:3])
+    rank_elastic_constants = matrix_rank(elastic_constants)
+    elastic_constants_aug = np.concatenate((elastic_constants,np.transpose([[1,1,1,0,0,0]])),1)
+    rank_elastic_constants_aug = matrix_rank(elastic_constants_aug)
+    if rank_elastic_constants_aug > rank_elastic_constants:
+        assert rank_elastic_constants_aug == rank_elastic_constants+1
+        print("Information: Hydrostatic pressure not in the image of the elasticity matrix, zero bulk modulus!")
+        return 0.
     else:
-        compliance = inv(elastic_constants)
-    bulk = 1/np.sum(compliance[0:3,0:3])
+        if matrix_rank(elastic_constants[3:,0:3]) == 0: #block diagonal matrix, only invert first 3x3 block
+            compliance = inv(elastic_constants[0:3,0:3])
+        else:
+            compliance = inv(elastic_constants)
+        bulk = 1/np.sum(compliance[0:3,0:3])
     return bulk
 
 def map_to_Kelvin(C):

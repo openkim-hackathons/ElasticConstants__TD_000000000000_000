@@ -1,13 +1,18 @@
 #!/usr/bin/python
 
 from kim_test_utils.test_driver import CrystalGenomeTestDriver, query_crystal_genome_structures
+from typing import Optional, Union, List
+from numdifftools import MaxStepGenerator
 from ase.build import bulk
 from ase.units import GPa
+from ase.atoms import Atoms
+from ase.cell import Cell
 from elastic import ElasticConstants, calc_bulk, find_nearest_isotropy, get_unique_components_and_reconstruct_matrix
 import numpy as np
 
 class TestDriver(CrystalGenomeTestDriver):
-    def _calculate(self, optimize:bool=False, method: str="energy-condensed", escalate: bool=False, **kwargs):
+    def _calculate(self, optimize:bool=False, method: str="energy-condensed", escalate: bool=False, 
+                   sg_override: Optional[Union[List[Union[MaxStepGenerator, float]],Union[MaxStepGenerator, float]]] = None, **kwargs):
         """
         Example calculate method. Just recalculates the binding-energy-crystal property.
 
@@ -22,6 +27,8 @@ class TestDriver(CrystalGenomeTestDriver):
                 method for calculating elasticity matrix. 
             escalate:
                 whether to automatically escalate calculation to a higher method if requested fails
+            sg_override:
+                override the default step sizes in the calculation
         """
 
         ####################################################
@@ -36,8 +43,8 @@ class TestDriver(CrystalGenomeTestDriver):
         space_group = int(self.prototype_label.split('_')[2])
 
         moduli = ElasticConstants(self.atoms)
-        elastic_constants, error_estimate, elastic_constants_names, elastic_constants_values = \
-            moduli.results(optimize=optimize, method=method, escalate=escalate, space_group=space_group)
+        elastic_constants, error_estimate, elastic_constants_names, elastic_constants_values, maximum_deviation = \
+            moduli.results(optimize=optimize, method=method, escalate=escalate, space_group=space_group, sg_override=sg_override)
         bulk = calc_bulk(elastic_constants)
 
         # Apply unit conversion
@@ -45,6 +52,7 @@ class TestDriver(CrystalGenomeTestDriver):
         error_estimate /= GPa
         elastic_constants_values = [elconst/GPa for elconst in elastic_constants_values]
         bulk /= GPa
+        maximum_deviation /= GPa
         units = 'GPa'        
 
         # Compute nearest isotropic constants and distance
@@ -62,6 +70,8 @@ class TestDriver(CrystalGenomeTestDriver):
         print()
         print('Error estimate [{}]:'.format(units))
         print(np.array_str(error_estimate, precision=5, max_line_width=100, suppress_small=True))
+        print()
+        print('Maximum deviation from material symmetry [{}] = {:.5f}'.format(units,maximum_deviation))
         print()
         print('Bulk modulus [{}] = {:.5f}'.format(units,bulk))
         print()
@@ -98,15 +108,17 @@ if __name__ == "__main__":
     ####################################################
     # if called directly, do some debugging examples
     ####################################################
-    kim_model_name = "EAM_Dynamo_AcklandMendelevSrolovitz_2004_FeP__MO_884343146310_005"
+    kim_model_name = "Sim_LAMMPS_AIREBO_LJ_StuartTuteinHarrison_2000_CH__SM_069621990420_000"
 
     # For initialization, only pass a KIM model name or an ASE calculator
     test_driver = TestDriver(kim_model_name)
 
+    test_driver(stoichiometric_species=["C"],prototype_label="A_hP4_194_bc",parameter_values_angstrom=[2.4175,20.],optimize=True,method="energy-condensed")
+
     # To do a calculation, you can pass an ASE.Atoms object or a Crystal Genome prototype designation.
     # Atoms object example:
     # atoms = bulk('Fe','bcc',a=2.863,cubic=True)
-    # test_driver(atoms)
+    # test_driver(atoms=atoms,optimize=True,method="stress-condensed-fast",escalate=True)
 
     # You can get a list of dictionaries of the results like this:
     # print(test_driver.get_property_instances())
@@ -116,11 +128,13 @@ if __name__ == "__main__":
 
     # Alternatively, you can pass a Crystal Genome designation. You can automatically query for all equilibrium structures for a given 
     # species and prototype label like this:
-    cg_des_list = query_crystal_genome_structures(kim_model_name, ["Fe","P"], "A2B_hP9_189_fg_ad")
+    # cg_des_list = query_crystal_genome_structures(kim_model_name, ["O","Si"], "A2B_hP9_154_c_a")
 
     # IMPORTANT: cg_des is a LIST. Pass only one element of it to the test, as keywords (i.e. using **):
-    for cg_des in cg_des_list:
-        test_driver(**cg_des,optimize=False,method="energy-condensed",escalate=True)
+    #for cg_des in cg_des_list:
+    #   test_driver(**cg_des,optimize=False,method="energy-condensed",escalate=True,sg_override=[1e-4,
+    #                1e-3,
+    #                1e-2,])
 
     # Now both results are in the property instances:
     # print(test_driver.get_property_instances())
