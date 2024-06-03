@@ -140,7 +140,7 @@ Revisions:
 
 import numpy as np
 import numpy.typing as npt
-from numpy.linalg import inv
+from numpy.linalg import inv, pinv
 from numpy.linalg import eig
 from numpy.linalg import matrix_rank, LinAlgError
 from ase.optimize import LBFGSLineSearch
@@ -327,7 +327,7 @@ for eqn in ELASTICITY_MATRIX_EQNS:
             for independent_component in eqn[dependent_component][1]:
                 assert not(independent_component in eqn)
 
-def get_unique_components_and_reconstruct_matrix(elastic_constants: npt.ArrayLike, space_group_number: int) -> Tuple[List[str],List[float],float]:
+def get_unique_components_and_reconstruct_matrix(elastic_constants: npt.ArrayLike, space_group_number: int) -> Tuple[List[str],List[float],npt.ArrayLike]:
     """
     From an elasticity matrix in Voigt order and a space group number, extract the
     elastic constants that should be unique (cij where first i is as low as possible, then j)
@@ -338,7 +338,7 @@ def get_unique_components_and_reconstruct_matrix(elastic_constants: npt.ArrayLik
     Returns:
         * Names of unique elastic constants
         * List of unique elastic constants
-        * Maximum deviation from symmetry
+        * Reconstructed matrix
     """
     assert(0 < space_group_number < 231)
 
@@ -383,9 +383,7 @@ def get_unique_components_and_reconstruct_matrix(elastic_constants: npt.ArrayLik
     
     reconstructed_matrix = reconstructed_matrix + reconstructed_matrix.T - np.diag(reconstructed_matrix.diagonal())
 
-    maximum_deviation = np.max(np.abs(reconstructed_matrix-elastic_constants))
-
-    return elastic_constants_names,elastic_constants_values,maximum_deviation
+    return elastic_constants_names,elastic_constants_values,reconstructed_matrix
                 
 def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
                          variable_cell:bool=True, logfile:Optional[Union[str,IO]]='-') -> None:
@@ -744,7 +742,7 @@ class ElasticConstants(object):
     def results(self, optimize:bool=False, method:str="energy-condensed", escalate:bool=False, space_group:int=1, 
                 sg_override: Optional[Union[List[Union[MaxStepGenerator, float]],Union[MaxStepGenerator, float]]] = None,
                 best_run_so_far: Optional[Tuple] = None) -> \
-        Tuple[npt.ArrayLike,npt.ArrayLike,List[str],List[float],float]:
+        Tuple[npt.ArrayLike,npt.ArrayLike,List[str],List[float],List[float],npt.ArrayLike,str]:
         """
         Compute the elastic constants of supercell, relaxed if requested,
         using numerical differentiation
@@ -765,11 +763,6 @@ class ElasticConstants(object):
                     of the condensed stress (i.e. the stress for a given strain
                     where the energy is relaxed with respect to internal atom
                     positions)
-                'stress-condensed-fast' : Same as 'stress-condensed' but
-                    the numerical differentiation is performed with a single
-                    step size (instead of a more accurate Richardson
-                    extraploation). Useful for large systems where the cost of
-                    the more accurate method is prohibitive.
                 'energy-full' : Compute elastic constants from the full Hessian
                     relative to both strains and internal atom degrees of
                     freedom. This is followed by an algebraic manipulation to
@@ -795,25 +788,36 @@ class ElasticConstants(object):
                 This function is run recursively to escalate the accuracy of the method used. Sometimes the notionally
                 more accurate methods do not result in a better result (notably for potentials with long range electrostatics),
                 so this allows us to back up to the best result. Therefore, it can take the tuple in the same format as its own results.                
-
         Returns:
+            elastic_constants_raw:
+                A 6x6 numpy array containing the elastic constants matrix
+                in Voigt ordering. This is the full matrix of derivatives
+                returned by numdifftools, with appropriate prefactors added
+                for Voigt notation, but not yet corrected for material symmetry.
+                Units are the default returned by the calculator.
+            elastic_constants_raw_error_estimate:
+                A 6x6 numpy array containing the 95% error in the elastic
+                constants returned by numdifftools, with appropriate prefactors added
+                for Voigt notation. Same units as elastic_constants.
+            elatic_constants_names:
+                Names of the unique elastic constants for the provided space group 
+                (e.g. ['c11','c12','c44'] for cubic)
+            elastic_constants_values:
+                The values of the above unique elastic constants
+            elastic_constants_values_error_estimate:
+                The error estimates corresponding to the above constants
             elastic_constants:
                 A 6x6 numpy array containing the elastic constants matrix
-                in Voigt ordering. Units are the default returned by the
-                calculator.
-            estimated_error:
-                A 6x6 numpy array containing the standard error in the elastic
-                constants returned by numdifftools. Same units as
-                elastic_constants.
-            elastic_constants_names:
-                Names of unique elastic constants for the provided crystal symmetry
-            elastic_constants_values:
-                List of unique elastic constants          
-            maximum_deviation:
-                Maximum deviation from material symmetry and frame indifference
+                in Voigt ordering, reconstructed from the above unique constants,
+                and therefore automatically obeying material symmetry.
+                Units are the default returned by the calculator.
+            message:
+                A summary of the run and any issues
+            
+
         """
-        assert method in ('energy-condensed','stress-condensed','stress-condensed-fast','energy-full'), \
-            "Unknown computation method. Supported methods: 'energy-condensed','stress-condensed','stress-condensed-fast','energy-full'"
+        assert method in ('energy-condensed','stress-condensed','energy-full'), \
+            "Unknown computation method. Supported methods: 'energy-condensed','stress-condensed','energy-full'"
 
         if optimize:
             print("Performing minimization of initial cell...")
@@ -837,25 +841,22 @@ class ElasticConstants(object):
                 sg = [sg_override]
         else:
             # Define different step generators for numerical differentiation to try
-            if method=="stress-condensed-fast":
-                sg = [1e-4]
-            else:
-                sg = [
-                    MaxStepGenerator(
-                        base_step=1e-4, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
-                    ),
-                    MaxStepGenerator(
-                        base_step=1e-3, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
-                    ),
-                    MaxStepGenerator(
-                        base_step=1e-2, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
-                    ),
-                    1e-4,
-                    1e-3,
-                    1e-2,
-                ]
+            sg = [
+                MaxStepGenerator(
+                    base_step=1e-4, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
+                ),
+                MaxStepGenerator(
+                    base_step=1e-3, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
+                ),
+                MaxStepGenerator(
+                    base_step=1e-2, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
+                ),
+                1e-4,
+                1e-3,
+                1e-2,
+            ]
 
-        if method=="stress-condensed-fast" or method=="stress-condensed":
+        if method=="stress-condensed":
             get_elasticity_matrix = self.get_elasticity_matrix_and_error_stress
         elif method=="energy-condensed":
             get_elasticity_matrix = self.get_elasticity_matrix_and_error_energy_condensed
@@ -867,86 +868,95 @@ class ElasticConstants(object):
             print()
             print("Attempting to compute elastic constants with method %s and step generator %s" % (method,step))
             print()
+            message = "\nMethod: %s\nStep generator: %s\n\n" % (method,step)
             try:
-                elastic_constants, error_estimate = get_elasticity_matrix(step)
+                elastic_constants_raw, elastic_constants_raw_error_estimate = get_elasticity_matrix(step)
             except Exception as e:
                 print()
                 print("The following exception was caught during Hessian or Jacobian calculation:")
                 print(repr(e))
                 print()
                 continue
-            max_el_const = np.max(np.abs(elastic_constants))
-            max_std_er = np.max(np.abs(error_estimate))/2 # numdifftools-provided errors are 95% confidence and can be quite big. Use standard error
-            if max_std_er > max_el_const * ELASTIC_CONSTANTS_ERROR_TOLERANCE:
-                print()
-                print("Maximum standard error estimate (1/2 of the error given by numdifftools) %f \n"
-                      "is too big compared to maximum elastic constant component %f (internal units) and requested fractional tolerance %f." % 
-                       (max_std_er,max_el_const,ELASTIC_CONSTANTS_ERROR_TOLERANCE))
-                print()
-                print('Error estimate (internal units):')
-                print(np.array_str(error_estimate, precision=5, max_line_width=100, suppress_small=True))
-                print()       
+
+            message = message + '\nRaw elastic constants [ASE units]:\n' + \
+                np.array_str(elastic_constants_raw, precision=5, max_line_width=100, suppress_small=True) + '\n\n'
+
+            # INTERPOLATION ERROR
+            max_el_const_raw = np.max(np.abs(elastic_constants_raw))
+            # numdifftools-provided errors are 95% confidence and can be quite big. Use standard error
+            max_std_er_raw = np.max(np.abs(elastic_constants_raw_error_estimate))/2 
+            message = message + '\n95%% Error estimate [ASE units]:\n' + \
+                np.array_str(elastic_constants_raw_error_estimate, precision=5, max_line_width=100, suppress_small=True) + '\n\n'
+            
+            if max_std_er_raw > max_el_const_raw * ELASTIC_CONSTANTS_ERROR_TOLERANCE:
+                message = message + '\nWARNING: Maximum standard error estimate (1/2 of the error given by numdifftools) %f \n' % max_std_er_raw + \
+                    'is too big compared to maximum elastic constant component %f [ASE units] and requested fractional tolerance %f.\n\n' % \
+                    (max_el_const_raw,ELASTIC_CONSTANTS_ERROR_TOLERANCE)
+                
                 successful_calculation = False
-            elastic_constants_names, elastic_constants_values, maximum_deviation = get_unique_components_and_reconstruct_matrix(elastic_constants, space_group)
-            if maximum_deviation > max_el_const * ELASTIC_CONSTANTS_ERROR_TOLERANCE:
-                print()
-                print("Maximum deviation from material symmetry %f according to space group %d is too big compared to maximum elastic constant component %f (internal units) and requested fractional tolerance %f." % 
-                      (maximum_deviation,space_group,max_el_const,ELASTIC_CONSTANTS_ERROR_TOLERANCE))                
-                print()
-                print("Maximum deviation from material symmetry (internal units): " + str(maximum_deviation))
-                print()
+
+            # SYMMETRY ERROR
+            elastic_constants_names, elastic_constants_values, elastic_constants = \
+                get_unique_components_and_reconstruct_matrix(elastic_constants_raw, space_group)                    
+            # get error estimate for the unique constants
+            _,elastic_constants_values_error_estimate,_ = \
+                get_unique_components_and_reconstruct_matrix(elastic_constants_raw_error_estimate, space_group)
+            max_sym_dev = np.max(np.abs(elastic_constants-elastic_constants_raw))
+
+            message = message + '\nMaximum deviation from material symmetry [ASE units]: %f\n\n' % max_sym_dev
+
+            if max_sym_dev > max_el_const_raw * ELASTIC_CONSTANTS_ERROR_TOLERANCE:
+                message = message + \
+                    '\nWARNING: Maximum deviation from material symmetry according to space group %d is too big\n' % space_group + \
+                    'compared to maximum elastic constant component %f [ASE units] and requested fractional tolerance %f.\n\n' % \
+                    (max_el_const_raw,ELASTIC_CONSTANTS_ERROR_TOLERANCE)
+                
                 successful_calculation = False
+
+            print()
+            print('Summary of completed elastic constants calculation:')
+            print(message)
 
             if successful_calculation:
                 break
-                # No need to report anything because we will exit to final report
             else:
-                # Report elastic constants to give context to the messages above
-                print()
-                print ('Elastic constants (internal units):')
-                print (np.array_str(elastic_constants, precision=5, max_line_width=100, suppress_small=True))
-                print()
-                
                 # We did not reach the desired tolerances, but save the current run anyway in case it's the best we get
                 current_run_is_best = True
                 if best_run_so_far is not None:
-                    max_std_er_best_run = np.max(np.abs(best_run_so_far[1]))/2
-                    maximum_deviation_best_run = best_run_so_far[4]
+                    max_std_er_raw_best_run = np.max(np.abs(best_run_so_far[1]))/2
+                    max_sym_dev_best_run = np.max(np.abs(best_run_so_far[5]-best_run_so_far[0]))
                     # try to lower the maximum error, either in interpolation, or in symmetry
-                    if abs(max_std_er-max_std_er_best_run) <= float_info.epsilon: 
-                        # for single-step differentiations on energy-full and energy-condensed, errors will be identical, so I want to only look at maximum_deviation
-                        if maximum_deviation > maximum_deviation_best_run:
+                    if abs(max_std_er_raw-max_std_er_raw_best_run) <= float_info.epsilon: 
+                        # for single-step differentiations on energy-full and energy-condensed, errors will be identical, 
+                        # so I want to only look at maximum_deviation
+                        if max_sym_dev > max_sym_dev_best_run:
                             current_run_is_best = False
-                    elif max(max_std_er,maximum_deviation) > max(max_std_er_best_run,maximum_deviation_best_run):
+                    elif max(max_std_er_raw,max_sym_dev) > max(max_std_er_raw_best_run,max_sym_dev_best_run):
                             current_run_is_best = False
                 
                 if current_run_is_best:
-                    best_run_so_far = elastic_constants, error_estimate, elastic_constants_names, elastic_constants_values, maximum_deviation
+                    best_run_so_far = elastic_constants_raw, elastic_constants_raw_error_estimate, elastic_constants_names, elastic_constants_values, elastic_constants_values_error_estimate, elastic_constants, message
 
         if not successful_calculation:
-            if escalate and (method != "energy-full"):
-                if method == "stress-condensed-fast":
-                    newmethod = "stress-condensed"
-                elif method == "stress-condensed":
-                    newmethod = "energy-condensed"
-                else:
+            if escalate and (method != "stress-condensed"):
+                if method == "energy-condensed":
                     newmethod = "energy-full"
+                else:
+                    newmethod = "stress-condensed"
                 print ()
                 print ("Unable to compute elastic constants with method %s, escalating to method %s"%(method,newmethod))
                 print ()                
                 return self.results(optimize = False, method = newmethod, escalate = True, space_group = space_group, sg_override = sg_override, best_run_so_far = best_run_so_far)
             else:
-                print ()
-                print ("Warning: unsuccessful calculation reported, elastic constants may not be accurate.")
-                print ("A previous attempt may have ben better while still not satisfying tolerance. Checking...")
-                print ()
+                print("WARNING: None of the calculations successfully completed with errors within tolerance.")
                 # We are returning an unsuccessful calculation. See if we have a better one to back off to
                 if not current_run_is_best:
-                    print("Backing off to a previous run!")
-                    print()
+                    print("Using the following run with the lowest errors:\n"+best_run_so_far[6])
                     return best_run_so_far
+                else:
+                    print("The last run performed had the lowest errors.")
 
-        return elastic_constants, error_estimate, elastic_constants_names, elastic_constants_values, maximum_deviation
+        return elastic_constants_raw, elastic_constants_raw_error_estimate, elastic_constants_names, elastic_constants_values, elastic_constants_values_error_estimate, elastic_constants, message
 
 def calc_bulk(elastic_constants):
     """
@@ -974,10 +984,8 @@ def calc_bulk(elastic_constants):
         print("Information: Hydrostatic pressure not in the image of the elasticity matrix, zero bulk modulus!")
         return 0.
     else:
-        if matrix_rank(elastic_constants[3:,0:3]) == 0: #block diagonal matrix, only invert first 3x3 block
-            compliance = inv(elastic_constants[0:3,0:3])
-        else:
-            compliance = inv(elastic_constants)
+        # if a solution exists for a stress state of [1,1,1,0,0,0], you can always use the pseudoinverse
+        compliance = pinv(elastic_constants)
         bulk = 1/np.sum(compliance[0:3,0:3])
     return bulk
 

@@ -43,21 +43,25 @@ class TestDriver(CrystalGenomeTestDriver):
         space_group = int(self.prototype_label.split('_')[2])
 
         moduli = ElasticConstants(self.atoms)
-        elastic_constants, error_estimate, elastic_constants_names, elastic_constants_values, maximum_deviation = \
+        elastic_constants_raw, elastic_constants_raw_error_estimate, \
+            elastic_constants_names, elastic_constants_values, elastic_constants_values_error_estimate, \
+                elastic_constants, message = \
             moduli.results(optimize=optimize, method=method, escalate=escalate, space_group=space_group, sg_override=sg_override)
-        bulk = calc_bulk(elastic_constants)
+        max_sym_dev = np.max(np.abs(elastic_constants-elastic_constants_raw))
+        bulk = calc_bulk(elastic_constants_raw)
 
         # Apply unit conversion
-        elastic_constants /= GPa
-        error_estimate /= GPa
+        elastic_constants_raw /= GPa
+        elastic_constants_raw_error_estimate /= GPa
         elastic_constants_values = [elconst/GPa for elconst in elastic_constants_values]
+        elastic_constants_values_error_estimate = [elconst/GPa for elconst in elastic_constants_values_error_estimate]
         bulk /= GPa
-        maximum_deviation /= GPa
+        max_sym_dev /= GPa
         units = 'GPa'        
 
         # Compute nearest isotropic constants and distance
         try:
-            d_iso, bulk_iso, shear_iso = find_nearest_isotropy(elastic_constants)
+            d_iso, bulk_iso, shear_iso = find_nearest_isotropy(elastic_constants_raw)
             got_iso = True
         except:
             got_iso = False  # Failure can occur if elastic constants are
@@ -66,12 +70,12 @@ class TestDriver(CrystalGenomeTestDriver):
         # Echo output
         print('\nR E S U L T S\n')
         print('Elastic constants [{}]:'.format(units))
-        print(np.array_str(elastic_constants, precision=5, max_line_width=100, suppress_small=True))
+        print(np.array_str(elastic_constants_raw, precision=5, max_line_width=100, suppress_small=True))
         print()
-        print('Error estimate [{}]:'.format(units))
-        print(np.array_str(error_estimate, precision=5, max_line_width=100, suppress_small=True))
+        print('95 %% Error estimate [{}]:'.format(units))
+        print(np.array_str(elastic_constants_raw_error_estimate, precision=5, max_line_width=100, suppress_small=True))
         print()
-        print('Maximum deviation from material symmetry [{}] = {:.5f}'.format(units,maximum_deviation))
+        print('Maximum deviation from material symmetry [{}] = {:.5f}'.format(units,max_sym_dev))
         print()
         print('Bulk modulus [{}] = {:.5f}'.format(units,bulk))
         print()
@@ -96,7 +100,27 @@ class TestDriver(CrystalGenomeTestDriver):
         ####################################################
         self._add_property_instance_and_common_crystal_genome_keys("elastic-constants-isothermal-npt",write_stress=True,write_temp=True)
         self._add_key_to_current_property_instance("elastic-constants-names",elastic_constants_names)
-        self._add_key_to_current_property_instance("elastic-constants-values",elastic_constants_values,"GPa")
+
+        self._add_key_to_current_property_instance(
+            "elastic-constants-values",
+            elastic_constants_values,
+            "GPa",
+            {
+                "source-expand-uncert-value":elastic_constants_values_error_estimate,
+                "uncert-lev-of-confid":95                
+            }
+        )
+        
+        self._add_key_to_current_property_instance(
+            "elasticity-matrix-raw",
+            elastic_constants_raw,
+            "GPa",
+            {
+                "source-expand-uncert-value":elastic_constants_raw_error_estimate,
+                "uncert-lev-of-confid":95
+            }
+        )
+
         self._add_key_to_current_property_instance("elasticity-matrix",elastic_constants,"GPa")
         if got_iso:
             self._add_key_to_current_property_instance("distance-to-isotropy",d_iso)
@@ -108,12 +132,10 @@ if __name__ == "__main__":
     ####################################################
     # if called directly, do some debugging examples
     ####################################################
-    kim_model_name = "Sim_LAMMPS_AIREBO_LJ_StuartTuteinHarrison_2000_CH__SM_069621990420_000"
+    kim_model_name = "EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_005"
 
     # For initialization, only pass a KIM model name or an ASE calculator
     test_driver = TestDriver(kim_model_name)
-
-    test_driver(stoichiometric_species=["C"],prototype_label="A_hP4_194_bc",parameter_values_angstrom=[2.4175,20.],optimize=True,method="energy-condensed")
 
     # To do a calculation, you can pass an ASE.Atoms object or a Crystal Genome prototype designation.
     # Atoms object example:
@@ -128,16 +150,14 @@ if __name__ == "__main__":
 
     # Alternatively, you can pass a Crystal Genome designation. You can automatically query for all equilibrium structures for a given 
     # species and prototype label like this:
-    # cg_des_list = query_crystal_genome_structures(kim_model_name, ["O","Si"], "A2B_hP9_154_c_a")
+    cg_des_list = query_crystal_genome_structures(kim_model_name, ['Al'], 'A_cF4_225_a')
 
     # IMPORTANT: cg_des is a LIST. Pass only one element of it to the test, as keywords (i.e. using **):
-    #for cg_des in cg_des_list:
-    #   test_driver(**cg_des,optimize=False,method="energy-condensed",escalate=True,sg_override=[1e-4,
-    #                1e-3,
-    #                1e-2,])
+    for cg_des in cg_des_list:
+       test_driver(**cg_des,optimize=False,method="energy-condensed",escalate=True)
 
     # Now both results are in the property instances:
     # print(test_driver.get_property_instances())
 
-    # test_driver.write_property_instances_to_file()
+    test_driver.write_property_instances_to_file()
 
