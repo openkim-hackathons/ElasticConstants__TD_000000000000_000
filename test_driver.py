@@ -11,7 +11,7 @@ from elastic import ElasticConstants, calc_bulk, find_nearest_isotropy, get_uniq
 import numpy as np
 
 class TestDriver(CrystalGenomeTestDriver):
-    def _calculate(self, method: str="energy-condensed", escalate: bool=False, 
+    def _calculate(self, method: str="energy-condensed", escalate: bool=True, 
                    sg_override: Optional[Union[List[Union[MaxStepGenerator, float]],Union[MaxStepGenerator, float]]] = None, **kwargs):
         """
         Example calculate method. Just recalculates the binding-energy-crystal property.
@@ -49,7 +49,7 @@ class TestDriver(CrystalGenomeTestDriver):
         bulk = calc_bulk(elastic_constants_raw)
 
         if 'WARNING' in message:
-            disclaimer = 'Elastic constants calculation had an uncertainty or deviation from material symmetry greater than 1%.\n'
+            disclaimer = 'Elastic constants calculation had an uncertainty or deviation from material symmetry greater than 1%.\n'+\
             'See pipeline.stdout for calculation details.'
         else:
             disclaimer = None
@@ -143,8 +143,8 @@ if __name__ == "__main__":
 
     # To do a calculation, you can pass an ASE.Atoms object or a Crystal Genome prototype designation.
     # Atoms object example:
-    atoms = bulk('Al','fcc',a=4.0,cubic=True)
-    test_driver(atoms=atoms,optimize=True,method="stress-condensed",escalate=True)
+    #atoms = bulk('Al','fcc',a=4.0,cubic=True)
+    #test_driver(atoms=atoms,optimize=True,method="stress-condensed",escalate=True)
 
     # You can get a list of dictionaries of the results like this:
     # print(test_driver.get_property_instances())
@@ -154,16 +154,16 @@ if __name__ == "__main__":
 
     # Alternatively, you can pass a Crystal Genome designation. You can automatically query for all equilibrium structures for a given 
     # species and prototype label like this:
-    #cg_des_list = query_crystal_genome_structures(kim_model_name, ["Al"], 'A_cF4_225_a')
+    cg_des_list = query_crystal_genome_structures(kim_model_name, ["Al"], 'A_cF4_225_a')
 
     # IMPORTANT: cg_des is a LIST. Pass only one element of it to the test, as keywords (i.e. using **):
-    #for cg_des in cg_des_list:
-    #   test_driver(**cg_des,optimize=False,method="stress-condensed",escalate=True,sg_override=MaxStepGenerator(
-    #                base_step=1e-4, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
-    #            ),)
+    for cg_des in cg_des_list:
+       test_driver(**cg_des,optimize=False,method="stress-condensed",escalate=True,sg_override=MaxStepGenerator(
+                    base_step=1e-4, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
+                ),)
 
     # Now both results are in the property instances:
     # print(test_driver.get_property_instances())
 
-    #test_driver.write_property_instances_to_file()
+    test_driver.write_property_instances_to_file()
 

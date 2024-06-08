@@ -85,8 +85,8 @@
   "crystal-genome-material-id" {
     "type"         "string"
     "has-unit"     false
-    "extent"       [":"]
+    "extent"       []
     "required"     false
-    "description"  "A provenance identifier of the format '[KIM test result uuid]:[instance-id]'. The chain of dependencies of this test that produced this structure ends in the test listed in the test result, and started with the structure computed in the specific test result and instance-id referenced."
+    "description"  "A structure provenance identifier of the format '[KIM test result uuid]:[instance-id]', e.g. 'TE_258644009221_002-and-MO_751354403791_005-1715722494-tr:2'. The chain of dependencies of this test that produced this specific structure ends in the test listed in the test result, and started with the structure computed in the specific test result and instance-id referenced."
   }
 }

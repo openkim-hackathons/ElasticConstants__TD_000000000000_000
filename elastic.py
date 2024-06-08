@@ -674,7 +674,7 @@ class ElasticConstants(object):
 
         return elastic_constants, error_estimate
     
-    def results(self, method:str="energy-condensed", escalate:bool=False, space_group:int=1, 
+    def results(self, method:str="energy-condensed", escalate:bool=True, space_group:int=1, 
                 sg_override: Optional[Union[List[Union[MaxStepGenerator, float]],Union[MaxStepGenerator, float]]] = None,
                 best_run_so_far: Optional[Tuple] = None) -> \
         Tuple[npt.ArrayLike,npt.ArrayLike,List[str],List[float],List[float],npt.ArrayLike,str]:
