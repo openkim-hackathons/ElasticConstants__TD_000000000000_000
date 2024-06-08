@@ -142,18 +142,16 @@ import numpy as np
 import numpy.typing as npt
 from numpy.linalg import inv, pinv
 from numpy.linalg import eig
-from numpy.linalg import matrix_rank, LinAlgError
-from ase.optimize import LBFGSLineSearch
-from ase.constraints import ExpCellFilter
+from numpy.linalg import matrix_rank
 from ase.atoms import Atoms
 import numdifftools as ndt
 from numdifftools.step_generators import MaxStepGenerator
 import math
 from typing import Optional, Union, IO, Tuple, List, Dict
 from sys import float_info
+from kim_test_utils.test_driver import minimize_wrapper
 
-FMAX_INITIAL = 1e-5 # Force tolerance for the optional initial relaxation of the provided cell
-MAXSTEPS_INITIAL = 10000 # Maximum steps for the optional initial relaxation of the provided cell
+
 FMAX_STRAIN = 1e-5 # Force tolerance for the relaxation of internal coordinates during strain steps (in all methods except energy-full)
 MAXSTEPS_STRAIN = 200 # Maximum steps for the relaxation of internal coordinates during strain steps (in all methods except energy-full)
 ELASTIC_CONSTANTS_ERROR_TOLERANCE = 0.01 # Relative tolerance for elasticity matrix. The maximum error in elastic constants must be no 
@@ -383,70 +381,7 @@ def get_unique_components_and_reconstruct_matrix(elastic_constants: npt.ArrayLik
     
     reconstructed_matrix = reconstructed_matrix + reconstructed_matrix.T - np.diag(reconstructed_matrix.diagonal())
 
-    return elastic_constants_names,elastic_constants_values,reconstructed_matrix
-                
-def minimize_wrapper(supercell:Atoms, fmax:float=1e-5, steps:int=10000, \
-                         variable_cell:bool=True, logfile:Optional[Union[str,IO]]='-') -> None:
-    """
-    Use LBFGSLineSearch to Minimize cell energy with respect to cell shape and
-    internal atom positions.
-
-    LBFGSLineSearch convergence behavior is as follows:
-    - The solver returns True if it is able to converge within the optimizer
-      iteration limits (which can be changed by the `steps` argument passed
-      to `run`), otherwise it returns False.
-    - The solver raises an exception in situations where the line search cannot
-      improve the solution, typically due to an incompatibility between the
-      potential's values for energy, forces, and/or stress.
-
-    This routine attempts to minimizes the energy until the force and stress
-    reduce below specified tolerances given a provided limit on the number of
-    allowed steps. The code returns when convergence is achieved or no
-    further progress can be made, either due to reaching the iteration step
-    limit, or a stalled minimization due to line search failures.
-
-    Parameters:
-        supercell:
-            Atomic configuration to be minimized.
-        fmax:
-            Force convergence tolerance (the magnitude of the force on each
-            atom must be less than this for convergence)
-        steps:
-            Maximum number of iterations for the minimization
-        variable_cell:
-            True to allow relaxation with respect to cell shape
-    """
-    if variable_cell:
-        supercell_wrapped = ExpCellFilter(supercell)
-        opt = LBFGSLineSearch(supercell_wrapped, logfile=logfile)
-    else:
-        opt = LBFGSLineSearch(supercell, logfile=logfile)
-    try:
-        converged = opt.run(fmax=fmax, steps=steps)
-        iteration_limits_reached = not converged
-        minimization_stalled = False
-    except Exception as e:
-        minimization_stalled = True
-        iteration_limits_reached = False
-        print()
-        print("The following exception was caught during minimization:")
-        print(repr(e))
-        print()
-
-    print("Minimization "+
-        ("stalled" if minimization_stalled else "stopped" if iteration_limits_reached else "converged")+
-        " after "+
-        (("hitting the maximum of "+str(steps)) if iteration_limits_reached else str(opt.nsteps))+
-        " steps.")
-    
-    if minimization_stalled or iteration_limits_reached:
-        print()
-        print("Final forces:")
-        print(supercell.get_forces())
-        print()
-        print("Final stress:")
-        print(supercell.get_stress())
-        print()
+    return elastic_constants_names,elastic_constants_values,reconstructed_matrix                
 
 def energy_hessian_add_prefactors(hessian: npt.ArrayLike, hessian_error_estimate: npt.ArrayLike) -> Tuple[npt.ArrayLike,npt.ArrayLike]:
     """
@@ -739,7 +674,7 @@ class ElasticConstants(object):
 
         return elastic_constants, error_estimate
     
-    def results(self, optimize:bool=False, method:str="energy-condensed", escalate:bool=False, space_group:int=1, 
+    def results(self, method:str="energy-condensed", escalate:bool=False, space_group:int=1, 
                 sg_override: Optional[Union[List[Union[MaxStepGenerator, float]],Union[MaxStepGenerator, float]]] = None,
                 best_run_so_far: Optional[Tuple] = None) -> \
         Tuple[npt.ArrayLike,npt.ArrayLike,List[str],List[float],List[float],npt.ArrayLike,str]:
@@ -748,10 +683,6 @@ class ElasticConstants(object):
         using numerical differentiation
 
         Parameters:
-            optimize:
-                If set to True, first minimize the energy of the supercell
-                subject to strain and internal atom positions. Otherwise,
-                compute the elastic constants for the as provided structure.
             method:
                 Select method for computing the elastic constants. The following
                 methods are supported:
@@ -819,21 +750,6 @@ class ElasticConstants(object):
         assert method in ('energy-condensed','stress-condensed','energy-full'), \
             "Unknown computation method. Supported methods: 'energy-condensed','stress-condensed','energy-full'"
 
-        if optimize:
-            print("Performing minimization of initial cell...")
-            print()
-            minimize_wrapper(self.supercell, fmax=FMAX_INITIAL, steps=MAXSTEPS_INITIAL, variable_cell=True)
-            print()
-            print("Minimized fractional positions:")
-            print(self.supercell.get_scaled_positions())
-            print()
-            print("Minimized cell parameters:")
-            print(self.supercell.cell)
-            print()
-            self.o_cell = self.supercell.get_cell()
-            self.o_volume = self.supercell.get_volume()
-            self.refpositions = self.supercell.get_positions()
-
         if sg_override is not None:
             if isinstance(sg_override,list):
                 sg = sg_override
@@ -851,9 +767,6 @@ class ElasticConstants(object):
                 MaxStepGenerator(
                     base_step=1e-2, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
                 ),
-                1e-4,
-                1e-3,
-                1e-2,
             ]
 
         if method=="stress-condensed":

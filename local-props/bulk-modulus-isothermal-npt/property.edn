@@ -3,7 +3,7 @@
 
   "property-title" "Isothermal bulk modulus of a crystal at a given temperature and stress state"
 
-  "property-description" "Isothermal bulk modulus of a crystal at a given temperature and stress state. The bulk modulus is defined as the ratio of an infinitesimal increase in the pressure p to the resulting relative decrease of the volume, or dilatation e (where e is the trace of the strain tensor) at a given reference state. The structure of the crystal is expressed as an AFLOW prototype label and its corresponding free parameters representing the average positions of the constituent atoms."
+  "property-description" "Isothermal bulk modulus of a crystal at a given temperature and stress state. The bulk modulus is defined as the ratio of an infinitesimal increase in the pressure p to the resulting relative decrease of the volume, or dilatation e (where e is the trace of the infinitesimal strain tensor) at a given reference state. The structure of the crystal is expressed as an AFLOW prototype label and its corresponding free parameters representing the average positions of the constituent atoms."
 
   "prototype-label" {
     "type"         "string"
@@ -74,5 +74,19 @@
     "extent"       []
     "required"     true
     "description" "Isothermal bulk modulus of the crystal at the specified temperature and stress state."
+  }
+  "coordinates-file" {
+    "type"         "file"
+    "has-unit"     false
+    "extent"       []
+    "required"     false
+    "description"  "A file containing the atomic configuration including information such as the species, x,y,z coordinates of each particle, and periodicity data."
+  }  
+  "crystal-genome-material-id" {
+    "type"         "string"
+    "has-unit"     false
+    "extent"       [":"]
+    "required"     false
+    "description"  "A provenance identifier of the format '[KIM test result uuid]:[instance-id]'. The chain of dependencies of this test that produced this structure ends in the test listed in the test result, and started with the structure computed in the specific test result and instance-id referenced."
   }
 }

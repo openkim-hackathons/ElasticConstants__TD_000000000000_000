@@ -3,7 +3,7 @@
 
   "property-title" "Isothermal elastic constants of a crystal at a given temperature and stress state"
 
-  "property-description" "The independent isothermal elastic constants of a crystal at a given temperature and stress state (The elastic constants are the 2nd derivatives of the strain energy density with respect to strain.)"
+  "property-description" "The independent isothermal elastic constants of a crystal at a given temperature and stress state. The elastic constants are defined as the 2nd derivatives of the strain energy density with respect to the infinitesimal strain tensor. The structure of the crystal is expressed as an AFLOW prototype label and its corresponding free parameters representing the average positions of the constituent atoms."
 
   "prototype-label" {
     "type"         "string"
@@ -73,27 +73,48 @@
     "has-unit"     false
     "extent"       [":"]
     "required"     true
-    "description"  "Names of the unique elastic constants of the crystal system to which the crystal belongs. All other components of the elastic tensor can be computed from these based on the crystal symmetry. They are expressed in Voigt notation, which is defined on pg. 230 of Tadmor, et al., Continuum Mechanics and Thermodynamics, Cambridge University Press, 2012. The components should be expressed in the same coordinate system as the structure specified by prototype-label and parameter-values, with the orientation of lattice vectors defined in M. J. Mehl et al., Comput. Mater. Sci. 136, S1 (2017)."
+    "description"  "Names of the unique elastic constants of the crystal system to which the crystal belongs. They are expressed in Voigt notation with the order [xx,yy,zz,yz,xz,xy]. The components should be expressed in the same coordinate system as the structure specified by the prototype-label and parameter-values, with the orientation of lattice vectors defined in M. J. Mehl et al., Comput. Mater. Sci. 136, S1 (2017)."
   }
   "elastic-constants-values" {
     "type"         "float"
     "has-unit"     true
     "extent"       [":"]
     "required"     true
-    "description"  "The values of the elastic tensor components specified in elastic-constants-names"
+    "description"  "Values for the elastic tensor components listed in 'elastic-constants-names'."
   }
   "elasticity-matrix" {
-    "type"         "float"
+   "type"         "float"
     "has-unit"     true
     "extent"       [6,6]
     "required"     true
-    "description"  "The full 6x6 elasticity matrix in Voigt notation, constructed based on crystal symmetry, from the entries specified in elastic-constants-names and elastic-constants-values."
+    "description"  "The elasticity matrix in Voigt notation with the order [xx,yy,zz,yz,xz,xy]. It is guaranteed to obey the symmetry of the described crystal. If the elastic constants were not computed or measured using a procedure that is inherently symmetry reduced, this is computed from 'elasticity-matrix-raw' by algebraically correcting to enforce the crystal symmetry."
+  }
+  "elasticity-matrix-raw" {
+    "type"         "float"
+    "has-unit"     true
+    "extent"       [6,6]
+    "required"     false
+    "description"  "The elasticity matrix in Voigt notation with the order [xx,yy,zz,yz,xz,xy]. This is provided if the elastic constants were computed or measured in a non-symmetry-reduced fashion. Due to numerical or experimental errors, this matrix may not satisfy expected symmetries exactly. Symmetrized results are provided in 'elasticity-matrix'."
   }
   "distance-to-isotropy" {
     "type"         "float"
     "has-unit"     false
     "extent"       []
     "required"     false
-    "description"  "The distance between the elastic tensor to the nearest matrix of elastic constants for an isotropic material expressed in the log Euclidean metric. See Morin, L et al., J. Elast., 138, 221 (2020)."
+    "description"  "The distance between the elasticity tensor to the nearest matrix of elastic constants for an isotropic material expressed in the log Euclidean metric. See Morin, L et al., J. Elast., 138, 221 (2020)."
   }
+  "coordinates-file" {
+    "type"         "file"
+    "has-unit"     false
+    "extent"       []
+    "required"     false
+    "description"  "A file containing the atomic configuration including information such as the species, x,y,z coordinates of each particle, and periodicity data."
+  }  
+  "crystal-genome-material-id" {
+    "type"         "string"
+    "has-unit"     false
+    "extent"       [":"]
+    "required"     false
+    "description"  "A provenance identifier of the format '[KIM test result uuid]:[instance-id]'. The chain of dependencies of this test that produced this structure ends in the test listed in the test result, and started with the structure computed in the specific test result and instance-id referenced."
+  }  
 }
