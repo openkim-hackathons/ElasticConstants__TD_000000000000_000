@@ -136,7 +136,7 @@ if __name__ == "__main__":
     ####################################################
     # if called directly, do some debugging examples
     ####################################################
-    kim_model_name = "EAM_Dynamo_ErcolessiAdams_1994_Al__MO_123629422045_005"
+    kim_model_name = "MEAM_LAMMPS_LeeShimBaskes_2003_Pt__MO_534993486058_001"
 
     # For initialization, only pass a KIM model name or an ASE calculator
     test_driver = TestDriver(kim_model_name)
@@ -154,13 +154,11 @@ if __name__ == "__main__":
 
     # Alternatively, you can pass a Crystal Genome designation. You can automatically query for all equilibrium structures for a given 
     # species and prototype label like this:
-    cg_des_list = query_crystal_genome_structures(kim_model_name, ["Al"], 'A_cF4_225_a')
+    cg_des_list = query_crystal_genome_structures(kim_model_name, ['Pt'], 'A_cF4_225_a')	
 
     # IMPORTANT: cg_des is a LIST. Pass only one element of it to the test, as keywords (i.e. using **):
     for cg_des in cg_des_list:
-       test_driver(**cg_des,optimize=False,method="stress-condensed",escalate=True,sg_override=MaxStepGenerator(
-                    base_step=1e-4, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0
-                ),)
+       test_driver(**cg_des,)
 
     # Now both results are in the property instances:
     # print(test_driver.get_property_instances())

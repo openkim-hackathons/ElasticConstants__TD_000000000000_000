@@ -770,6 +770,7 @@ class ElasticConstants(object):
             ]
 
         if method=="stress-condensed":
+            sg.append(MaxStepGenerator(base_step=1e-1, num_steps=14, use_exact_steps=True, step_ratio=1.6, offset=0))
             get_elasticity_matrix = self.get_elasticity_matrix_and_error_stress
         elif method=="energy-condensed":
             get_elasticity_matrix = self.get_elasticity_matrix_and_error_energy_condensed
@@ -852,14 +853,11 @@ class ElasticConstants(object):
 
         if not successful_calculation:
             if escalate and (method != "stress-condensed"):
-                if method == "energy-condensed":
-                    newmethod = "energy-full"
-                else:
-                    newmethod = "stress-condensed"
+                newmethod = "stress-condensed"
                 print ()
                 print ("Unable to compute elastic constants with method %s, escalating to method %s"%(method,newmethod))
                 print ()                
-                return self.results(optimize = False, method = newmethod, escalate = True, space_group = space_group, sg_override = sg_override, best_run_so_far = best_run_so_far)
+                return self.results(method = newmethod, escalate = True, space_group = space_group, sg_override = sg_override, best_run_so_far = best_run_so_far)
             else:
                 print("WARNING: None of the calculations successfully completed with errors within tolerance.")
                 # We are returning an unsuccessful calculation. See if we have a better one to back off to
