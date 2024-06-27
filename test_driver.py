@@ -143,8 +143,8 @@ if __name__ == "__main__":
 
     # To do a calculation, you can pass an ASE.Atoms object or a Crystal Genome prototype designation.
     # Atoms object example:
-    #atoms = bulk('Al','fcc',a=4.0,cubic=True)
-    #test_driver(atoms=atoms,optimize=True,method="stress-condensed",escalate=True)
+    atoms = bulk('Pt','fcc',a=4.0,cubic=True)
+    test_driver(atoms=atoms,optimize=True)
 
     # You can get a list of dictionaries of the results like this:
     # print(test_driver.get_property_instances())
@@ -154,11 +154,11 @@ if __name__ == "__main__":
 
     # Alternatively, you can pass a Crystal Genome designation. You can automatically query for all equilibrium structures for a given 
     # species and prototype label like this:
-    cg_des_list = query_crystal_genome_structures(kim_model_name, ['Pt'], 'A_cF4_225_a')	
+    #cg_des_list = query_crystal_genome_structures(kim_model_name, ['Pt'], 'A_cF4_225_a')	
 
     # IMPORTANT: cg_des is a LIST. Pass only one element of it to the test, as keywords (i.e. using **):
-    for cg_des in cg_des_list:
-       test_driver(**cg_des,)
+    #for cg_des in cg_des_list:
+    #   test_driver(**cg_des,)
 
     # Now both results are in the property instances:
     # print(test_driver.get_property_instances())

@@ -14,3 +14,4 @@
 {"prototype_label": "A_cF4_225_a", "stoichiometric_species": ["Pt"], "crystal_genome_test_args": {}, "kimnum": "278980316539"}
 {"prototype_label": "AB_cF8_225_a_b", "stoichiometric_species": ["Mg", "O"], "crystal_genome_test_args": {}, "kimnum": "358768470082"}
 {"prototype_label": "A_cF8_227_a", "stoichiometric_species": ["Si"], "crystal_genome_test_args": {}, "kimnum": "053026016508"}
+{"prototype_label": "AB2_cF12_225_a_c", "stoichiometric_species": ["Ce", "O"], "crystal_genome_test_args": {}, "kimnum": "452301879882"}

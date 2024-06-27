@@ -1,9 +1,9 @@
 {
-  "property-id" "tag:staff@noreply.openkim.org,2024-01-26:property/bulk-modulus-isothermal-npt"
+  "property-id" "tag:staff@noreply.openkim.org,2024-01-26:property/elastic-constants-isothermal-npt"
 
-  "property-title" "Isothermal bulk modulus of a crystal at a given temperature and stress state"
+  "property-title" "Isothermal elastic constants of a crystal at a given temperature and stress state"
 
-  "property-description" "Isothermal bulk modulus of a crystal at a given temperature and stress state. The bulk modulus is defined as the ratio of an infinitesimal increase in the pressure p to the resulting relative decrease of the volume, or dilatation e (where e is the trace of the infinitesimal strain tensor) at a given reference state. The structure of the crystal is expressed as an AFLOW prototype label and its corresponding free parameters representing the average positions of the constituent atoms."
+  "property-description" "The independent isothermal elastic constants of a crystal at a given temperature and stress state. The elastic constants are defined as the 2nd derivatives of the strain energy density with respect to the infinitesimal strain tensor. The structure of the crystal is expressed as an AFLOW prototype label and its corresponding free parameters representing the average positions of the constituent atoms."
 
   "prototype-label" {
     "type"         "string"
@@ -66,14 +66,42 @@
     "has-unit"     true
     "extent"       [6]
     "required"     true
-    "description"  "The [xx,yy,zz,yz,xz,xy] components of the symmetric Cauchy stress tensor at the reference configuration at which the bulk modulus is evaluated. The components should be expressed in the same coordinate system as the structure specified by prototype-label and parameter-values, with the orientation of lattice vectors defined in M. J. Mehl et al., Comput. Mater. Sci. 136, S1 (2017)."
+    "description"  "The [xx,yy,zz,yz,xz,xy] components of the symmetric Cauchy stress tensor at the reference configuration at which the elasticity tensor is evaluated. The components should be expressed in the same coordinate system as the structure specified by prototype-label and parameter-values, with the orientation of lattice vectors defined in M. J. Mehl et al., Comput. Mater. Sci. 136, S1 (2017)."
   }
-  "isothermal-bulk-modulus" {
+  "elastic-constants-names" {
+    "type"         "string"
+    "has-unit"     false
+    "extent"       [":"]
+    "required"     true
+    "description"  "Names of the unique elastic constants of the crystal system to which the crystal belongs. They are expressed in Voigt notation with the order [xx,yy,zz,yz,xz,xy]. The components should be expressed in the same coordinate system as the structure specified by the prototype-label and parameter-values, with the orientation of lattice vectors defined in M. J. Mehl et al., Comput. Mater. Sci. 136, S1 (2017)."
+  }
+  "elastic-constants-values" {
     "type"         "float"
     "has-unit"     true
-    "extent"       []
+    "extent"       [":"]
     "required"     true
-    "description" "Isothermal bulk modulus of the crystal at the specified temperature and stress state."
+    "description"  "Values for the elastic tensor components listed in 'elastic-constants-names'."
+  }
+  "elasticity-matrix" {
+   "type"         "float"
+    "has-unit"     true
+    "extent"       [6,6]
+    "required"     true
+    "description"  "The elasticity matrix in Voigt notation with the order [xx,yy,zz,yz,xz,xy]. It is guaranteed to obey the symmetry of the described crystal. If the elastic constants were not computed or measured using a procedure that is inherently symmetry reduced, this is computed from 'elasticity-matrix-raw' by algebraically correcting to enforce the crystal symmetry."
+  }
+  "elasticity-matrix-raw" {
+    "type"         "float"
+    "has-unit"     true
+    "extent"       [6,6]
+    "required"     false
+    "description"  "The elasticity matrix in Voigt notation with the order [xx,yy,zz,yz,xz,xy]. This is provided if the elastic constants were computed or measured in a non-symmetry-reduced fashion. Due to numerical or experimental errors, this matrix may not satisfy expected symmetries exactly. Symmetrized results are provided in 'elasticity-matrix'."
+  }
+  "distance-to-isotropy" {
+    "type"         "float"
+    "has-unit"     false
+    "extent"       []
+    "required"     false
+    "description"  "The distance between the elasticity tensor to the nearest matrix of elastic constants for an isotropic material expressed in the log Euclidean metric. See Morin, L et al., J. Elast., 138, 221 (2020)."
   }
   "coordinates-file" {
     "type"         "file"
@@ -82,11 +110,11 @@
     "required"     false
     "description"  "A file containing the atomic configuration including information such as the species, x,y,z coordinates of each particle, and periodicity data."
   }  
-  "crystal-genome-material-id" {
+  "crystal-genome-source-structure-id" {
     "type"         "string"
     "has-unit"     false
-    "extent"       []
+    "extent"       [":"]
     "required"     false
-    "description"  "A structure provenance identifier of the format '[KIM test result uuid]:[instance-id]', e.g. 'TE_258644009221_002-and-MO_751354403791_005-1715722494-tr:2'. The chain of dependencies of this test that produced this specific structure ends in the test listed in the test result, and started with the structure computed in the specific test result and instance-id referenced."
-  }
+    "description"  "The identifier (ID) of the Crystal Genome (CG) structure for which the property (test result and instance) containing this key was computed. The ID points to an archived CG structure (test result and instance) and has the following format: '[KIM test result uuid]:[instance-id]', e.g., 'TE_258644009221_002-and-MO_751354403791_005-1715722494-tr:2'."
+  }  
 }

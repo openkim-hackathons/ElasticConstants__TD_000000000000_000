@@ -29,10 +29,10 @@ for query_element in query_result:
         if not isinstance(short_name,list):
             short_name = [short_name]
         addtl_cg_fields['short_name'] = short_name
-    if 'crystal-genome-material-id.source-value' in query_element:
-        material_id = query_element['crystal-genome-material-id.source-value']
+    if 'crystal-genome-source-structure-id.source-value' in query_element:
+        material_id = query_element['crystal-genome-source-structure-id.source-value']
     else:
-        material_id = query_element['meta.uuid']+':'+str(query_element['instance-id'])
+        material_id = [query_element['meta.uuid']+':'+str(query_element['instance-id'])]
     test(
         stoichiometric_species = stoichiometric_species,
         prototype_label = prototype_label,
