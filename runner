@@ -46,7 +46,7 @@ for query_element in query_result:
     if 'crystal-genome-source-structure-id.source-value' in query_element:
         crystal_genome_source_structure_id = query_element['crystal-genome-source-structure-id.source-value']
     else:
-        crystal_genome_source_structure_id = query_element['meta.uuid']+':'+str(query_element['instance-id'])
+        crystal_genome_source_structure_id = [query_element['meta.uuid']+':'+str(query_element['instance-id'])]
     test(
         stoichiometric_species = stoichiometric_species,
         prototype_label = prototype_label,
