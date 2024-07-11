@@ -147,9 +147,9 @@ from ase.atoms import Atoms
 import numdifftools as ndt
 from numdifftools.step_generators import MaxStepGenerator
 import math
-from typing import Optional, Union, IO, Tuple, List, Dict
+from typing import Optional, Union, Tuple, List
 from sys import float_info
-from kim_test_utils.test_driver import minimize_wrapper
+from kim_tools import minimize_wrapper
 
 
 FMAX_STRAIN = 1e-5 # Force tolerance for the relaxation of internal coordinates during strain steps (in all methods except energy-full)
@@ -428,8 +428,7 @@ class ElasticConstants(object):
         self.supercell = supercell
         self.natoms = supercell.get_global_number_of_atoms()
         # Store the original reference cell structure and volume, and atom
-        # positions. These will overwritten if an initial cell relaxation is
-        # requested.
+        # positions.
         self.o_cell = self.supercell.get_cell()
         self.o_volume = self.supercell.get_volume()
         self.refpositions = self.supercell.get_positions()

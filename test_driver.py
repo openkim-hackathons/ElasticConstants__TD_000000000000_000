@@ -1,13 +1,10 @@
 #!/usr/bin/python
 
-from kim_test_utils.test_driver import CrystalGenomeTestDriver, query_crystal_genome_structures
+from kim_tools import CrystalGenomeTestDriver, query_crystal_genome_structures
 from typing import Optional, Union, List
 from numdifftools import MaxStepGenerator
-from ase.build import bulk
 from ase.units import GPa
-from ase.atoms import Atoms
-from ase.cell import Cell
-from elastic import ElasticConstants, calc_bulk, find_nearest_isotropy, get_unique_components_and_reconstruct_matrix
+from elastic import ElasticConstants, calc_bulk, find_nearest_isotropy
 import numpy as np
 
 class TestDriver(CrystalGenomeTestDriver):
@@ -130,38 +127,3 @@ class TestDriver(CrystalGenomeTestDriver):
             self._add_key_to_current_property_instance("distance-to-isotropy",d_iso)
         self._add_property_instance_and_common_crystal_genome_keys("bulk-modulus-isothermal-npt",write_stress=True,write_temp=True,disclaimer=disclaimer)
         self._add_key_to_current_property_instance("isothermal-bulk-modulus",bulk,"GPa")
-
-
-if __name__ == "__main__":        
-    ####################################################
-    # if called directly, do some debugging examples
-    ####################################################
-    kim_model_name = "MEAM_LAMMPS_LeeShimBaskes_2003_Pt__MO_534993486058_001"
-
-    # For initialization, only pass a KIM model name or an ASE calculator
-    test_driver = TestDriver(kim_model_name)
-
-    # To do a calculation, you can pass an ASE.Atoms object or a Crystal Genome prototype designation.
-    # Atoms object example:
-    atoms = bulk('Pt','fcc',a=4.0,cubic=True)
-    test_driver(atoms=atoms,optimize=True)
-
-    # You can get a list of dictionaries of the results like this:
-    # print(test_driver.get_property_instances())
-
-    # Or write it to a file (by default `output/results.edn`) like this:
-    #test_driver.write_property_instances_to_file()
-
-    # Alternatively, you can pass a Crystal Genome designation. You can automatically query for all equilibrium structures for a given 
-    # species and prototype label like this:
-    #cg_des_list = query_crystal_genome_structures(kim_model_name, ['Pt'], 'A_cF4_225_a')	
-
-    # IMPORTANT: cg_des is a LIST. Pass only one element of it to the test, as keywords (i.e. using **):
-    #for cg_des in cg_des_list:
-    #   test_driver(**cg_des,)
-
-    # Now both results are in the property instances:
-    # print(test_driver.get_property_instances())
-
-    test_driver.write_property_instances_to_file()
-
