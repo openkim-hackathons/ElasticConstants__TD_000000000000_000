@@ -4,7 +4,7 @@ from kim_tools import CrystalGenomeTestDriver, query_crystal_genome_structures
 from typing import Optional, Union, List
 from numdifftools import MaxStepGenerator
 from ase.units import GPa
-from elastic import ElasticConstants, calc_bulk, find_nearest_isotropy
+from .elastic import ElasticConstants, calc_bulk, find_nearest_isotropy
 import numpy as np
 
 class TestDriver(CrystalGenomeTestDriver):
