@@ -12,17 +12,17 @@ is not positive definite.
 
 The following methods for computing the elastic constants are supported:
 
-# energy-condensed : Compute elastic constants from the hessian of the
-condensed strain energy density, W_eff(eps) = min_d W(eps,d), where d are
-the displacements of the internal atoms (aside from preventing rigid-body
-translation) and eps is the strain.
-# stress-condensed : Compute elastic constants from the jacobian of the
-condensed stress, sig_eff(eps) = sig(eps,dmin), where dmin = arg min_d
-W(eps,d). 
-# energy-full : Compute elastic constants from the hessian of the full
-strain energy density, W(eps,d). This involves an algebraic manipulation
-to account for the effect of atom relaxation; see eqn (27), in Tadmor et
-al, Phys. Rev. B, 59:235-245, 1999.
+    #. energy-condensed : Compute elastic constants from the hessian of the
+    condensed strain energy density, W_eff(eps) = min_d W(eps,d), where d are
+    the displacements of the internal atoms (aside from preventing rigid-body
+    translation) and eps is the strain.
+    #. stress-condensed : Compute elastic constants from the jacobian of the
+    condensed stress, sig_eff(eps) = sig(eps,dmin), where dmin = arg min_d
+    W(eps,d). 
+    #. energy-full : Compute elastic constants from the hessian of the full
+    strain energy density, W(eps,d). This involves an algebraic manipulation
+    to account for the effect of atom relaxation; see eqn (27), in Tadmor et
+    al, Phys. Rev. B, 59:235-245, 1999.
 
 All three methods give similar results with differences beyond the first or
 second digit due to the numerical differentiation. The `energy-condensed` and
