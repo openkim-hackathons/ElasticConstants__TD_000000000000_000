@@ -19,8 +19,7 @@ translation) and eps is the strain.
 
 (II) stress-condensed : Compute elastic constants from the jacobian of the
 condensed stress, sig_eff(eps) = sig(eps,dmin), where dmin = arg min_d
-W(eps,d). A faster, less accurate version of this approach
-(stress-condensed-fast), is also provided.
+W(eps,d). 
 
 (III) energy-full : Compute elastic constants from the hessian of the full
 strain energy density, W(eps,d). This involves an algebraic manipulation
@@ -705,8 +704,8 @@ class ElasticConstants(object):
                 larger Hessian matrix that has to be computed.
             escalate:
                 If true and the method you chose produces errors that are too large or
-                raises an error, automatically attempt to escalate to the more accurate method
-                (stress-condensed-fast -> stress-condensed -> energy-condensed -> energy-full)
+                raises an error, automatically attempt to use 'stress-condensed' method.
+                The result that yields the lowest errors is reported in the end.
             space_group:
                 Space group of the crystal for checking that the elastic constants obey material
                 symmetry. A setting of 1 (default) means "no symmetry" and can be used if
