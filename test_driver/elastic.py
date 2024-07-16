@@ -6,7 +6,7 @@ representative volume elements (RVEs) of non-crystlline materials with the RVE
 taken to be periodic.
 
 The code also computes the distance from the obtained elasticity tensor to
-the nearest isotropic tensor using. This provides a measure of the anisotropy
+the nearest isotropic tensor. This provides a measure of the anisotropy
 of the crystal. Note that this calculation can fail if the elasticity tensor
 is not positive definite.
 
