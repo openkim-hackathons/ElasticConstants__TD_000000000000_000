@@ -26,21 +26,31 @@ strain energy density, W(eps,d). This involves an algebraic manipulation
 to account for the effect of atom relaxation; see eqn (27), in Tadmor et
 al, Phys. Rev. B, 59:235-245, 1999.
 
-All three methods give similar results with differences beyond the first or
-second digit due to the numerical differentiation. The `energy-condensed` and
-`energy-full` approaches have comparable accuracy, but full Hessian is *much*
-slower. The `stress-condensed` approach is significantly faster than
-`energy-condensed`, but is less accurate. The default apporach is
-`energy-condensed`. The other methods are retained in the code for testing
-purposes or, for very large systems, the `stress-condensed` method is an
-option.
+For well-behaved potentials, all three methods give similar results with 
+differences beyond the first or second digit due to the numerical differentiation. 
+The `energy-condensed` and `energy-full` approaches have comparable accuracy, 
+but full Hessian is *much* slower. The `stress-condensed` approach is 
+significantly faster than `energy-condensed`, but is less accurate. 
 
-If the error reported by the numdifftools is too large, the code automatically
-escalates to the next more accurate (slower) method. This is controlled by the 
-ELASTIC_CONSTANTS_ERROR_TOLERANCE constant in this file. Additionally,
-you can provide a space group to check whether or not the elastic constants
+For potentials with a rough energy landscape due to sharp cut-offs or
+electrostatics, `stress-condensed` is sometimes better behaved.
+
+The default approach is `energy-condensed`. 
+
+If the numdifftools interpolation error, or the deviation from material
+symmetry (see below), is too large (specified by the `ELASTIC_CONSTANTS_ERROR_TOLERANCE` 
+constant in this file), the code will first try increasingly coarse steps 
+for numerical differentiation. Failing that, if `stress-condensed` is not 
+being used already, the code will switch to it. Finally, if no run had
+sufficiently low error, the code will return the results with the lowest error.
+
+The choice of steps, as well as the method-switching behavior can be 
+overridden by the arguments `sg_override` and `escalate` to `ElasticConstants.results`.
+
+You can provide a space group to check whether or not the elastic constants
 conform to the expected material symmetry. To use this, the unit cell
 must be in standard IUCr orientation.
+
 
 === Theory ===
 
